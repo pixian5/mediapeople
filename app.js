@@ -176,7 +176,8 @@ const seedState = {
   promoCodes: [
     { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
     { code: "MEDIA888", matchmakerId: "m2", used: false, usedBy: null },
-    { code: "LOVE999", matchmakerId: null, used: false, usedBy: null }
+    { code: "LOVE999", matchmakerId: null, used: false, usedBy: null },
+    { code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true }
   ],
 };
 
@@ -206,6 +207,18 @@ function ensureStateDefaults(s) {
   if (u2) {
     if (!u2.email) u2.email = "qing@example.com";
     if (u2.phone === undefined || u2.phone === "13800000002") u2.phone = null; // force null for u2 to test supplement
+  }
+  if (!s.promoCodes || s.promoCodes.length === 0) {
+    s.promoCodes = [
+      { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
+      { code: "MEDIA888", matchmakerId: "m2", used: false, usedBy: null },
+      { code: "LOVE999", matchmakerId: null, used: false, usedBy: null },
+      { code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true }
+    ];
+  } else {
+    if (!s.promoCodes.some(p => p.code === "1")) {
+      s.promoCodes.push({ code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true });
+    }
   }
   return s;
 }
@@ -968,7 +981,7 @@ function redeemVip() {
     return;
   }
 
-  if (promoCode.used) {
+  if (promoCode.used && !promoCode.infinite) {
     showToast("该兑换码已被兑换使用！");
     return;
   }
@@ -979,8 +992,10 @@ function redeemVip() {
     return;
   }
 
-  promoCode.used = true;
-  promoCode.usedBy = user.id;
+  if (!promoCode.infinite) {
+    promoCode.used = true;
+    promoCode.usedBy = user.id;
+  }
 
   user.vip = true;
   let matchmaker = null;

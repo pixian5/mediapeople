@@ -175,6 +175,12 @@ const seedState = {
   ],
   requests: [],
   deals: [{ id: "d1", requestId: null, amount: 399, createdAt: "2026-06-10" }],
+  promoCodes: [
+    { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
+    { code: "MEDIA888", matchmakerId: "m2", used: false, usedBy: null },
+    { code: "LOVE999", matchmakerId: null, used: false, usedBy: null },
+    { code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true }
+  ],
 };
 
 const pool = new Pool(
@@ -212,7 +218,7 @@ async function initDatabase() {
 }
 
 function validateState(data) {
-  const requiredArrays = ["agencies", "matchmakers", "users", "requests", "deals"];
+  const requiredArrays = ["agencies", "matchmakers", "users", "requests", "deals", "promoCodes"];
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return "state must be an object";
   }
