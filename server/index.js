@@ -6,7 +6,8 @@ const PORT = Number(process.env.PORT || 3000);
 
 const seedState = {
   currentUserId: "u1",
-  selectedMatchmakerId: "m1",
+  selectedMatchmakerId: null,
+  adminLoggedIn: false,
   splits: {
     promo: 20,
     matchmaker: 35,

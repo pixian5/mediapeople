@@ -1205,3 +1205,117 @@ th {
   }
 }
 
+/* --- App Auth & Tabs Lock Overlay Refactoring --- */
+
+/* Small Program Disabled Tab Styling */
+.tabs.compact-tabs button.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #e2e8f0;
+  color: #94a3b8;
+}
+
+/* Shake Animation for tab click block feedback */
+.shake {
+  animation: shakeTab 0.3s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shakeTab {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* Embedded Auth UI Wrapper & Card */
+.auth-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 120px);
+  width: 100%;
+}
+
+.auth-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 16px;
+  box-shadow: 0 15px 35px rgba(30, 38, 51, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  width: 100%;
+  max-width: 460px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.auth-header h2 {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--ink), var(--teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.auth-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.auth-tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 4px;
+  border-radius: 8px;
+  gap: 4px;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 9px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.auth-tab-btn:hover {
+  color: var(--ink);
+}
+
+.auth-tab-btn.active {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.auth-panel {
+  display: none;
+  animation: fadeInAuth 0.3s ease forwards;
+}
+
+.auth-panel.active {
+  display: block;
+}
+
+@keyframes fadeInAuth {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+

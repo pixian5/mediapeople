@@ -4,7 +4,8 @@ const API_BASE = "/api";
 
 const seedState = {
   currentUserId: "u1",
-  selectedMatchmakerId: "m1",
+  selectedMatchmakerId: null,
+  adminLoggedIn: false,
   splits: {
     promo: 20,
     matchmaker: 35,
@@ -409,33 +410,25 @@ function renderMiniApp() {
   $("#vipState").style.background = user ? (user.vip ? "#d9f7e8" : "#fff1c7") : "#eef2f5";
   $("#vipState").style.color = user ? (user.vip ? "#166534" : "#7a4a08") : "#6d7785";
   
-  // Tab lock overlays control
+  // Tab lock control (置灰其它页面 Tab，强行锁定“我的”)
+  const tabs = $$("[data-mini-tab]");
   if (!user) {
-    $("#discoverLock").style.display = "flex";
-    $("#discoverContent").style.display = "none";
+    tabs.forEach((tab) => {
+      const isMine = tab.dataset.miniTab === "mine";
+      tab.classList.toggle("disabled", !isMine);
+      tab.setAttribute("aria-disabled", !isMine ? "true" : "false");
+    });
     
-    $("#profileLock").style.display = "flex";
-    $("#profileContent").style.display = "none";
-    
-    $("#vipLock").style.display = "flex";
-    $("#vipContent").style.display = "none";
-    
-    $("#requestsLock").style.display = "flex";
-    $("#requestsContent").style.display = "none";
+    // 如果当前活动的不是“我的”，强行切到“我的”
+    const currentTab = $(".tabs.compact-tabs button.active")?.dataset.miniTab;
+    if (currentTab !== "mine") {
+      switchMiniTab("mine");
+    }
   } else {
-    $("#discoverLock").style.display = "none";
-    $("#discoverContent").style.display = "block";
-    
-    $("#profileLock").style.display = "none";
-    $("#profileContent").style.display = "block";
-    
-    $("#vipLock").style.display = "none";
-    $("#vipContent").style.display = "block";
-    
-    $("#requestsLock").style.display = "none";
-    $("#requestsContent").style.display = "block";
-    
-    // Fill the profile form fields
+    tabs.forEach((tab) => {
+      tab.classList.remove("disabled");
+      tab.removeAttribute("aria-disabled");
+    });
     renderProfileForm();
   }
 
@@ -658,15 +651,34 @@ function becomeVip() {
 }
 
 function renderMatchmakerDesk() {
-  $("#matchmakerSelect").innerHTML = state.matchmakers
-    .map(
-      (item) =>
-        `<option value="${item.id}" ${item.id === state.selectedMatchmakerId ? "selected" : ""}>${item.name} · ${item.code}</option>`,
-    )
-    .join("");
+  const mmId = state.selectedMatchmakerId;
+  if (!mmId) {
+    $("#matchmakerAuthContainer").style.display = "block";
+    $("#matchmakerWorkbench").style.display = "none";
+
+    // 渲染已有红娘登录列表
+    $("#mmLoginSelect").innerHTML = state.matchmakers
+      .map((m) => {
+        const agency = getAgency(m.agencyId);
+        return `<option value="${m.id}">${m.name} [${m.code}] (${agency?.name || "未知机构"})</option>`;
+      })
+      .join("");
+
+    // 渲染红娘注册机构列表
+    $("#mmRegisterAgencySelect").innerHTML = state.agencies
+      .map((agency) => `<option value="${agency.id}">${agency.name}</option>`)
+      .join("");
+    return;
+  }
+
+  $("#matchmakerAuthContainer").style.display = "none";
+  $("#matchmakerWorkbench").style.display = "block";
+
+  const mm = getMatchmaker(mmId);
+  $("#matchmakerWelcomeTitle").textContent = `红娘工作台 - 当前红娘：${mm?.name || "未登录"}`;
 
   const requests = state.requests.filter(
-    (request) => request.matchmakerId === state.selectedMatchmakerId,
+    (request) => request.matchmakerId === mmId,
   );
   $("#notificationCount").textContent = `${requests.filter((item) => item.status === "待红娘联系").length} 条待处理`;
   $("#notificationList").innerHTML =
@@ -724,6 +736,15 @@ function completeRequest(requestId) {
 }
 
 function renderAdmin() {
+  if (!state.adminLoggedIn) {
+    $("#adminAuthContainer").style.display = "block";
+    $("#adminConsole").style.display = "none";
+    return;
+  }
+
+  $("#adminAuthContainer").style.display = "none";
+  $("#adminConsole").style.display = "block";
+
   renderMetrics();
   renderSplit();
   renderAgencies();
@@ -955,66 +976,24 @@ function seedDeal() {
 }
 
 // Account Modal Functions (Matchmaker only)
-function openAccountModal() {
-  const modal = $("#accountModal");
-  modal.style.display = "flex";
-  // Trigger reflow to enable transition animation
-  modal.offsetHeight;
-  modal.classList.add("show");
+// --- Matchmaker Built-in Auth Logic ---
+function mmAuthLogin() {
+  const selectedId = $("#mmLoginSelect").value;
+  const m = state.matchmakers.find((item) => item.id === selectedId);
+  if (!m) return;
 
-  // Render switch account dropdown lists
-  renderAccountSwitchLists();
-  // Render matchmaker register agencies list
-  renderRegisterMatchmakerAgencies();
+  state.selectedMatchmakerId = selectedId;
+  saveState();
+  renderAll();
+  logEvent("match", `红娘 '${m.name}' 成功登录红娘工作台`);
+  showToast(`已登录为红娘：${m.name}`);
 }
 
-function closeAccountModal() {
-  const modal = $("#accountModal");
-  modal.classList.remove("show");
-  // Hide after animation finishes
-  window.setTimeout(() => {
-    if (!modal.classList.contains("show")) {
-      modal.style.display = "none";
-    }
-  }, 300);
-}
-
-function switchModalTab(tab) {
-  const isRegister = tab === "register";
-  $("#tabRegisterBtn").classList.toggle("active", isRegister);
-  $("#tabSwitchBtn").classList.toggle("active", !isRegister);
-  $("#panelRegister").style.display = isRegister ? "block" : "none";
-  $("#panelSwitch").style.display = isRegister ? "none" : "block";
-}
-
-function renderAccountSwitchLists() {
-  // Render matchmakers list
-  $("#switchMatchmakerSelect").innerHTML = state.matchmakers
-    .map(
-      (m) => {
-        const agency = getAgency(m.agencyId);
-        return `<option value="${m.id}" ${m.id === state.selectedMatchmakerId ? "selected" : ""}>${m.name} [${m.code}] (${agency?.name || "未知机构"})</option>`;
-      }
-    )
-    .join("");
-}
-
-function renderRegisterMatchmakerAgencies() {
-  const select = $("#registerMatchmakerForm select[name='agencyId']");
-  if (select) {
-    select.innerHTML = state.agencies
-      .map((agency) => `<option value="${agency.id}">${agency.name}</option>`)
-      .join("");
-  }
-}
-
-// Register Matchmaker
-function registerMatchmaker(event) {
+function mmAuthRegister(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const code = form.elements.code.value.trim().toUpperCase();
 
-  // Validate referral code uniqueness
   const isDuplicate = state.matchmakers.some(
     (m) => m.code.toUpperCase() === code
   );
@@ -1037,24 +1016,43 @@ function registerMatchmaker(event) {
 
   form.reset();
   saveState();
-  closeAccountModal();
-  switchView("matchmaker");
   renderAll();
-  showToast(`红娘 ${name} 注册成功并已登录`);
+  logEvent("match", `新红娘注册并登录成功：${name} [${code}]`);
+  showToast(`红娘 ${name} 注册并登录成功`);
 }
 
-// Switch Matchmaker
-function switchMatchmaker() {
-  const selectedId = $("#switchMatchmakerSelect").value;
-  const m = state.matchmakers.find((item) => item.id === selectedId);
-  if (!m) return;
-
-  state.selectedMatchmakerId = selectedId;
+function mmAuthLogout() {
+  const mm = getMatchmaker(state.selectedMatchmakerId);
+  const name = mm ? mm.name : "未知";
+  
+  state.selectedMatchmakerId = null;
   saveState();
-  closeAccountModal();
-  switchView("matchmaker");
   renderAll();
-  showToast(`已切换为红娘：${m.name}`);
+  logEvent("match", `红娘 '${name}' 已退出工作台登录`);
+  showToast("红娘已安全退出登录");
+}
+
+// --- Admin Built-in Auth Logic ---
+function adminAuthLogin(event) {
+  event.preventDefault();
+  const password = $("#adminPasswordInput").value;
+  if (password.toLowerCase() === "admin") {
+    state.adminLoggedIn = true;
+    saveState();
+    renderAll();
+    logEvent("sys", "管理员成功安全登录管理控制台");
+    showToast("管理员登录成功");
+  } else {
+    showToast("密码错误！默认演示密码为 admin");
+  }
+}
+
+function adminAuthLogout() {
+  state.adminLoggedIn = false;
+  saveState();
+  renderAll();
+  logEvent("sys", "管理员已退出管理控制台");
+  showToast("管理员已退出登录");
 }
 
 // --- Mini Program Native Account Functions ---
@@ -1244,7 +1242,17 @@ function bindEvents() {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
   $$("[data-mini-tab]").forEach((button) => {
-    button.addEventListener("click", () => switchMiniTab(button.dataset.miniTab));
+    button.addEventListener("click", () => {
+      if (button.classList.contains("disabled")) {
+        const frame = $(".phone-frame");
+        frame.classList.remove("shake");
+        void frame.offsetWidth; // trigger reflow
+        frame.classList.add("shake");
+        showToast("请先在“我的”页面登录或注册客户账号");
+        return;
+      }
+      switchMiniTab(button.dataset.miniTab);
+    });
   });
   ["#genderFilter", "#cityFilter", "#ageFilter"].forEach((selector) => {
     $(selector).addEventListener("change", renderProfiles);
@@ -1259,36 +1267,11 @@ function bindEvents() {
   });
   $("#becomeVipBtn").addEventListener("click", becomeVip);
   $("#profileForm").addEventListener("submit", saveProfile);
-  $("#matchmakerSelect").addEventListener("change", (event) => {
-    state.selectedMatchmakerId = event.target.value;
-    saveState();
-    renderAll();
-  });
   $("#splitForm").addEventListener("submit", saveSplits);
   $("#agencyForm").addEventListener("submit", addAgency);
   $("#matchmakerForm").addEventListener("submit", addMatchmaker);
   $("#seedDealBtn").addEventListener("click", seedDeal);
   $("#resetDataBtn").addEventListener("click", resetState);
-
-  // 红娘管理模态弹窗事件绑定
-  $("#openAccountModalBtn").addEventListener("click", openAccountModal);
-  $("#closeAccountModalBtn").addEventListener("click", closeAccountModal);
-  $("#accountModal").addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) {
-      closeAccountModal();
-    }
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && $("#accountModal").style.display === "flex") {
-      closeAccountModal();
-    }
-  });
-
-  $("#tabRegisterBtn").addEventListener("click", () => switchModalTab("register"));
-  $("#tabSwitchBtn").addEventListener("click", () => switchModalTab("switch"));
-  
-  $("#registerMatchmakerForm").addEventListener("submit", registerMatchmaker);
-  $("#switchMatchmakerBtn").addEventListener("click", switchMatchmaker);
 
   // 小程序端内置登录/注册/退出/解锁跳转事件
   $$(".mini-to-register-btn").forEach((btn) => {
@@ -1308,6 +1291,31 @@ function bindEvents() {
       logEvent("sys", "业务审计日志已清空");
     }
   });
+
+  // 内置红娘工作台登录/注册/退出事件绑定
+  const mmTabLogin = $("#mmAuthTabLoginBtn");
+  const mmTabReg = $("#mmAuthTabRegisterBtn");
+  if (mmTabLogin && mmTabReg) {
+    mmTabLogin.addEventListener("click", () => {
+      mmTabLogin.classList.add("active");
+      mmTabReg.classList.remove("active");
+      $("#mmAuthLoginPanel").classList.add("active");
+      $("#mmAuthRegisterPanel").style.display = "none";
+    });
+    mmTabReg.addEventListener("click", () => {
+      mmTabReg.classList.add("active");
+      mmTabLogin.classList.remove("active");
+      $("#mmAuthRegisterPanel").style.display = "block";
+      $("#mmAuthLoginPanel").classList.remove("active");
+    });
+  }
+  $("#mmLoginSubmitBtn").addEventListener("click", mmAuthLogin);
+  $("#mmRegisterForm").addEventListener("submit", mmAuthRegister);
+  $("#mmLogoutBtn").addEventListener("click", mmAuthLogout);
+
+  // 内置管理员登录/退出事件绑定
+  $("#adminLoginForm").addEventListener("submit", adminAuthLogin);
+  $("#adminLogoutBtn").addEventListener("click", adminAuthLogout);
 }
 
 bindEvents();

@@ -25,7 +25,6 @@
           <span class="panel-kicker">当前演示</span>
           <strong id="currentPersona">客户：林安</strong>
           <p>数据保存在本机浏览器，可随时重置体验。</p>
-          <button class="primary-button" id="openAccountModalBtn" type="button" style="width: 100%; margin-bottom: 8px; min-height: 36px; padding: 0 10px; font-size: 13px;">红娘/后台管理</button>
           <button class="ghost-button" id="resetDataBtn" type="button">重置演示数据</button>
         </div>
       </aside>
@@ -326,176 +325,191 @@
         </section>
 
         <section class="view" id="matchmakerView">
-          <div class="toolbar">
-            <div>
-              <span class="eyebrow">红娘工作台</span>
-              <h2>牵线通知与客户联系</h2>
+          <!-- 红娘登录与注册界面 -->
+          <div class="auth-wrapper" id="matchmakerAuthContainer" style="display: none;">
+            <div class="auth-card">
+              <header class="auth-header">
+                <h2>红娘工作台登录</h2>
+                <p>请选择已有红娘账号登录，或注册新红娘进入工作台</p>
+              </header>
+              
+              <div class="auth-tabs" role="tablist">
+                <button class="auth-tab-btn active" id="mmAuthTabLoginBtn" type="button">已有红娘登录</button>
+                <button class="auth-tab-btn" id="mmAuthTabRegisterBtn" type="button">注册新红娘</button>
+              </div>
+
+              <!-- 登录面板 -->
+              <div class="auth-panel" id="mmAuthLoginPanel">
+                <div class="stack-form" style="grid-template-columns: 1fr auto; margin-top: 10px;">
+                  <select id="mmLoginSelect" aria-label="选择红娘"></select>
+                  <button class="primary-button" id="mmLoginSubmitBtn" type="button" style="min-height: 40px;">一键登录</button>
+                </div>
+              </div>
+
+              <!-- 注册面板 -->
+              <div class="auth-panel" id="mmAuthRegisterPanel" style="display: none;">
+                <form id="mmRegisterForm" class="form-grid" style="margin-top: 10px;">
+                  <label class="wide">
+                    <span>红娘姓名</span>
+                    <input name="name" required placeholder="如：李红娘" />
+                  </label>
+                  <label class="wide">
+                    <span>所属机构</span>
+                    <select name="agencyId" required id="mmRegisterAgencySelect"></select>
+                  </label>
+                  <label class="wide">
+                    <span>唯一推荐码 (用于客户VIP绑定)</span>
+                    <input name="code" required placeholder="如：HM-LILI2" style="text-transform: uppercase;" />
+                  </label>
+                  <button class="primary-button wide" type="submit">立即注册并登录</button>
+                </form>
+              </div>
             </div>
-            <label class="inline-field">
-              <span>当前红娘</span>
-              <select id="matchmakerSelect"></select>
-            </label>
           </div>
-          <div class="workbench-grid">
-            <section class="panel">
-              <div class="section-title">
-                <h3>应用通知</h3>
-                <span id="notificationCount">0 条待处理</span>
+
+          <!-- 红娘工作台主页面 -->
+          <div id="matchmakerWorkbench" style="display: none;">
+            <div class="toolbar">
+              <div>
+                <span class="eyebrow">红娘工作台</span>
+                <h2 id="matchmakerWelcomeTitle">牵线通知与客户联系</h2>
               </div>
-              <div id="notificationList" class="request-list"></div>
-            </section>
-            <section class="panel">
-              <div class="section-title">
-                <h3>双方隐藏联系信息</h3>
-                <span>仅红娘可见</span>
-              </div>
-              <div id="contactPanel" class="contact-panel"></div>
-            </section>
+              <button class="ghost-button" id="mmLogoutBtn" type="button" style="width: auto; color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05);">退出登录</button>
+            </div>
+            <div class="workbench-grid">
+              <section class="panel">
+                <div class="section-title">
+                  <h3>应用通知</h3>
+                  <span id="notificationCount">0 条待处理</span>
+                </div>
+                <div id="notificationList" class="request-list"></div>
+              </section>
+              <section class="panel">
+                <div class="section-title">
+                  <h3>双方隐藏联系信息</h3>
+                  <span>仅红娘可见</span>
+                </div>
+                <div id="contactPanel" class="contact-panel"></div>
+              </section>
+            </div>
           </div>
         </section>
 
         <section class="view" id="adminView">
-          <div class="toolbar">
-            <div>
-              <span class="eyebrow">管理后台</span>
-              <h2>客户、红娘、机构与分成</h2>
+          <!-- 管理员登录界面 -->
+          <div class="auth-wrapper" id="adminAuthContainer" style="display: none;">
+            <div class="auth-card" style="max-width: 400px;">
+              <header class="auth-header">
+                <h2>系统管理后台登录</h2>
+                <p>请输入安全校验密码进入单身交友业务中台</p>
+              </header>
+              <form id="adminLoginForm" class="form-grid" style="margin-top: 10px;">
+                <label class="wide">
+                  <span>后台登录密码</span>
+                  <input type="password" id="adminPasswordInput" required placeholder="请输入密码 (默认 admin)" />
+                </label>
+                <button class="primary-button wide" type="submit" style="margin-top: 8px;">安全登录后台</button>
+              </form>
             </div>
-            <button class="primary-button" id="seedDealBtn" type="button">模拟一笔成交</button>
           </div>
 
-          <div class="metrics-grid" id="metricsGrid"></div>
+          <!-- 管理后台主界面 -->
+          <div id="adminConsole" style="display: none;">
+            <div class="toolbar">
+              <div>
+                <span class="eyebrow">管理后台</span>
+                <h2>客户、红娘、机构与分成</h2>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button class="primary-button" id="seedDealBtn" type="button">模拟一笔成交</button>
+                <button class="ghost-button" id="adminLogoutBtn" type="button" style="width: auto; color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05);">退出管理员</button>
+              </div>
+            </div>
 
-          <div class="admin-grid">
-            <section class="panel">
-              <div class="section-title">
-                <h3>分成比例</h3>
-                <span>合计需为 100%</span>
-              </div>
-              <form class="split-form" id="splitForm">
-                <label>
-                  <span>介绍推广费</span>
-                  <input name="promo" type="number" min="0" max="100" />
-                </label>
-                <label>
-                  <span>红娘牵线费</span>
-                  <input name="matchmaker" type="number" min="0" max="100" />
-                </label>
-                <label>
-                  <span>平台服务费</span>
-                  <input name="platform" type="number" min="0" max="100" />
-                </label>
-                <button class="primary-button" type="submit">保存分成</button>
-              </form>
-              <div id="splitPreview" class="split-preview"></div>
-            </section>
+            <div class="metrics-grid" id="metricsGrid"></div>
 
-            <section class="panel">
-              <div class="section-title">
-                <h3>添加机构</h3>
-                <span id="agencyCount">0 家</span>
-              </div>
-              <form class="stack-form" id="agencyForm">
-                <input name="name" placeholder="机构名称" required />
-                <input name="city" placeholder="所在城市" required />
-                <button class="secondary-button" type="submit">添加机构</button>
-              </form>
-              <div id="agencyList" class="plain-list"></div>
-            </section>
+            <div class="admin-grid">
+              <section class="panel">
+                <div class="section-title">
+                  <h3>分成比例</h3>
+                  <span>合计需为 100%</span>
+                </div>
+                <form class="split-form" id="splitForm">
+                  <label>
+                    <span>介绍推广费</span>
+                    <input name="promo" type="number" min="0" max="100" />
+                  </label>
+                  <label>
+                    <span>红娘牵线费</span>
+                    <input name="matchmaker" type="number" min="0" max="100" />
+                  </label>
+                  <label>
+                    <span>平台服务费</span>
+                    <input name="platform" type="number" min="0" max="100" />
+                  </label>
+                  <button class="primary-button" type="submit">保存分成</button>
+                </form>
+                <div id="splitPreview" class="split-preview"></div>
+              </section>
 
-            <section class="panel">
-              <div class="section-title">
-                <h3>添加红娘</h3>
-                <span id="matchmakerCount">0 位</span>
-              </div>
-              <form class="stack-form" id="matchmakerForm">
-                <input name="name" placeholder="红娘姓名" required />
-                <select name="agencyId" required></select>
-                <input name="code" placeholder="推荐码，如 HM-NANA" required />
-                <button class="secondary-button" type="submit">添加红娘</button>
-              </form>
-              <div id="matchmakerList" class="plain-list"></div>
-            </section>
+              <section class="panel">
+                <div class="section-title">
+                  <h3>添加机构</h3>
+                  <span id="agencyCount">0 家</span>
+                </div>
+                <form class="stack-form" id="agencyForm">
+                  <input name="name" placeholder="机构名称" required />
+                  <input name="city" placeholder="所在城市" required />
+                  <button class="secondary-button" type="submit">添加机构</button>
+                </form>
+                <div id="agencyList" class="plain-list"></div>
+              </section>
 
-            <section class="panel wide-panel">
-              <div class="section-title">
-                <h3>客户信息</h3>
-                <span id="customerCount">0 位</span>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>客户</th>
-                      <th>城市</th>
-                      <th>会员</th>
-                      <th>推荐红娘</th>
-                      <th>微信</th>
-                    </tr>
-                  </thead>
-                  <tbody id="customerRows"></tbody>
-                </table>
-              </div>
-            </section>
+              <section class="panel">
+                <div class="section-title">
+                  <h3>添加红娘</h3>
+                  <span id="matchmakerCount">0 位</span>
+                </div>
+                <form class="stack-form" id="matchmakerForm">
+                  <input name="name" placeholder="红娘姓名" required />
+                  <select name="agencyId" required></select>
+                  <input name="code" placeholder="推荐码，如 HM-NANA" required />
+                  <button class="secondary-button" type="submit">添加红娘</button>
+                </form>
+                <div id="matchmakerList" class="plain-list"></div>
+              </section>
 
-            <section class="panel wide-panel">
-              <div class="section-title">
-                <h3>图表概览</h3>
-                <span>客户、成交、金额</span>
-              </div>
-              <div id="chartPanel" class="chart-panel"></div>
-            </section>
+              <section class="panel wide-panel">
+                <div class="section-title">
+                  <h3>客户信息</h3>
+                  <span id="customerCount">0 位</span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>客户</th>
+                        <th>城市</th>
+                        <th>会员</th>
+                        <th>推荐红娘</th>
+                        <th>微信</th>
+                      </tr>
+                    </thead>
+                    <tbody id="customerRows"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel wide-panel">
+                <div class="section-title">
+                  <h3>图表概览</h3>
+                  <span>客户、成交、金额</span>
+                </div>
+                <div id="chartPanel" class="chart-panel"></div>
+              </section>
+            </div>
           </div>
         </section>
-      </main>
-    </div>
-
-    <!-- 红娘管理模态弹窗 -->
-    <div class="modal-backdrop" id="accountModal" style="display: none;">
-      <div class="modal-content">
-        <header class="modal-header">
-          <h2>红娘管理面板</h2>
-          <button class="modal-close" id="closeAccountModalBtn" type="button" aria-label="关闭">&times;</button>
-        </header>
-
-        <!-- Tab 切换 -->
-        <div class="modal-tabs" role="tablist">
-          <button class="modal-tab active" id="tabRegisterBtn" type="button">注册新红娘</button>
-          <button class="modal-tab" id="tabSwitchBtn" type="button">切换已有红娘</button>
-        </div>
-
-        <!-- 注册红娘面板 -->
-        <div class="modal-tab-panel active" id="panelRegister">
-          <form id="registerMatchmakerForm" class="form-grid">
-            <label class="wide">
-              <span>姓名</span>
-              <input name="name" required placeholder="如：李红娘" />
-            </label>
-            <label class="wide">
-              <span>所属机构</span>
-              <select name="agencyId" required></select>
-            </label>
-            <label class="wide">
-              <span>推荐码 (全局唯一)</span>
-              <input name="code" required placeholder="如：HM-LILI2" style="text-transform: uppercase;" />
-            </label>
-            <button class="primary-button wide" type="submit">立即注册并登录红娘</button>
-          </form>
-        </div>
-
-        <!-- 切换红娘面板 -->
-        <div class="modal-tab-panel" id="panelSwitch" style="display: none;">
-          <div class="switch-section" style="margin-bottom: 0;">
-            <div class="section-title">
-              <h3>选择红娘账号登录</h3>
-            </div>
-            <div class="stack-form" style="margin-bottom: 0; grid-template-columns: 1fr auto;">
-              <select id="switchMatchmakerSelect" aria-label="选择红娘" style="flex: 1; min-width: 0;"></select>
-              <button class="primary-button" id="switchMatchmakerBtn" type="button" style="min-height: 40px;">一键切换</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="./app.js"></script>
