@@ -42,10 +42,9 @@
                   <div class="vip-badge" id="vipState">普通用户</div>
                 </header>
 
-                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(4, 1fr);">
                   <button class="tab active" data-mini-tab="discover">筛选</button>
                   <button class="tab" data-mini-tab="profile">资料</button>
-                  <button class="tab" data-mini-tab="vip">会员</button>
                   <button class="tab" data-mini-tab="requests">牵线</button>
                   <button class="tab" data-mini-tab="mine">我的</button>
                 </div>
@@ -143,57 +142,7 @@
                   </div>
                 </section>
 
-                <section class="mini-tab" id="vipTab">
-                  <!-- 未登录锁 -->
-                  <div class="mini-lock-overlay" id="vipLock" style="display: none;">
-                    <div class="lock-content">
-                      <div class="lock-icon">🔒</div>
-                      <h3>开通会员服务</h3>
-                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
-                      <button class="primary-button mini-to-register-btn" type="button">去登录 / 注册</button>
-                    </div>
-                  </div>
-                  
-                  <!-- 正常内容 -->
-                  <div id="vipContent">
-                    <div class="pay-card" style="text-align: center;">
-                      <div style="text-align: left;">
-                        <span class="eyebrow">扫码付费</span>
-                        <h3>成为会员后解锁择偶要求</h3>
-                        <p>选择绑定专属红娘，模拟扫码支付 399 元，系统会记录推广红娘并生成分成。</p>
-                      </div>
-                      <div class="qr-box" aria-label="模拟付款二维码" style="margin: 10px auto;">
-                        <span></span><span></span><span></span><span></span>
-                      </div>
 
-                      <!-- 兑换码兑换区域 (移到二维码下方) -->
-                      <div style="margin: 15px 0; padding: 15px 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); text-align: left; width: 100%;">
-                        <label class="wide">
-                          <span style="font-weight: 800; color: #0f766e;">或者：使用会员兑换码兑换</span>
-                          <div style="display: flex; gap: 8px; margin-top: 6px;">
-                            <input id="vipPromoCodeInput" placeholder="如 VIP666" style="text-transform: uppercase; background: rgba(255, 255, 255, 0.9); flex: 1; min-height: 38px;" />
-                            <button class="primary-button" id="redeemVipBtn" type="button" style="background: var(--teal); border: none; min-width: 80px; min-height: 38px; padding: 0 14px;">立即兑换</button>
-                          </div>
-                        </label>
-                      </div>
-                      
-                      <div class="form-grid" style="margin-bottom: 15px; text-align: left;">
-                        <div class="wide" style="display: grid; gap: 6px;">
-                          <label for="referralMatchmakerSelect" style="color: var(--muted); font-size: 12px; font-weight: 700;">选择专属红娘 (可输入姓名、推荐码或机构快速筛选)</label>
-                          <div class="searchable-select">
-                            <input id="referralMatchmakerSelect" placeholder="-- 请选择专属红娘 --" autocomplete="off" style="background: white url('data:image/svg+xml;charset=utf-8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;%236d7785&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><polyline points=&quot;6 9 12 15 18 9&quot;/></svg>') no-repeat right 12px center/16px; cursor: pointer;" />
-                            <input type="hidden" id="referralCodeInput" />
-                            <div class="select-dropdown" id="matchmakerDropdownPanel" style="display: none;">
-                              <ul class="dropdown-options" id="matchmakerOptionsList"></ul>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <button class="primary-button" id="becomeVipBtn" type="button" style="width: 100%;">模拟支付并开通</button>
-                    </div>
-                  </div>
-                </section>
 
                 <section class="mini-tab" id="requestsTab">
                   <!-- 未登录锁 -->
@@ -281,57 +230,104 @@
 
                   <!-- 已登录状态 -->
                   <div id="miniMineRegistered" style="display: none;">
-                    <!-- 个人中心卡片 -->
-                    <div class="profile-card" style="border: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px;">
-                      <div id="miniMineAvatarBg" style="height: 120px; background-size: cover; background-position: center; border-radius: 8px 8px 0 0;"></div>
-                      <div class="profile-body" style="padding: 16px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between;">
-                          <strong id="miniMineName" style="font-size: 20px;">林安</strong>
-                          <span class="vip-badge" id="miniMineVip">普通用户</span>
+                    <div id="miniMineRegisteredMain">
+                      <!-- 个人中心卡片 -->
+                      <div class="profile-card" style="border: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px;">
+                        <div id="miniMineAvatarBg" style="height: 120px; background-size: cover; background-position: center; border-radius: 8px 8px 0 0;"></div>
+                        <div class="profile-body" style="padding: 16px;">
+                          <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <strong id="miniMineName" style="font-size: 20px;">林安</strong>
+                            <span class="vip-badge" id="miniMineVip">普通用户</span>
+                          </div>
+                          <div id="miniMineDetails" class="profile-meta" style="margin-top: 4px;">男 · 31 岁 · 上海</div>
                         </div>
-                        <div id="miniMineDetails" class="profile-meta" style="margin-top: 4px;">男 · 31 岁 · 上海</div>
+                      </div>
+
+                      <!-- 数据看板行 -->
+                      <div class="mine-stats-grid">
+                        <div class="stat-item">
+                          <strong id="mineStatRequests">0</strong>
+                          <span>牵线申请</span>
+                        </div>
+                        <div class="stat-item" style="border-left: 1px solid var(--line); border-right: 1px solid var(--line);">
+                          <strong id="mineStatVIP">普通</strong>
+                          <span>会员身份</span>
+                        </div>
+                        <div class="stat-item">
+                          <strong id="mineStatUnlocked">0</strong>
+                          <span>已解锁微信</span>
+                        </div>
+                      </div>
+
+                      <!-- 功能选项菜单 -->
+                      <div class="mine-menu-list">
+                        <div class="menu-item" id="vipServiceMenuItem" style="cursor: pointer;">
+                          <span class="menu-label">👑 会员服务</span>
+                          <span id="mineMenuVipStatus">未开通 VIP</span>
+                        </div>
+                        <div class="menu-item">
+                          <span class="menu-label">🤝 专属红娘</span>
+                          <span id="mineMenuMatchmaker">待指派</span>
+                        </div>
+                        <div class="menu-item" id="realNameVerificationMenuItem" style="cursor: pointer;">
+                          <span class="menu-label">🛡️ 实名认证</span>
+                          <span class="status-badge orange" id="miniMineRealNameStatus">未认证</span>
+                        </div>
+                        <div class="menu-item">
+                          <span class="menu-label">📞 专属客服</span>
+                          <span class="status-badge gray">hqlak47@gmail.com</span>
+                        </div>
+                      </div>
+
+                      <!-- 账号操作菜单 -->
+                      <div class="pay-card" style="padding: 0;">
+                        <button class="ghost-button" id="miniLogoutBtn" type="button" style="color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05); width: 100%;">退出当前登录</button>
                       </div>
                     </div>
 
-                    <!-- 数据看板行 -->
-                    <div class="mine-stats-grid">
-                      <div class="stat-item">
-                        <strong id="mineStatRequests">0</strong>
-                        <span>牵线申请</span>
-                      </div>
-                      <div class="stat-item" style="border-left: 1px solid var(--line); border-right: 1px solid var(--line);">
-                        <strong id="mineStatVIP">普通</strong>
-                        <span>会员身份</span>
-                      </div>
-                      <div class="stat-item">
-                        <strong id="mineStatUnlocked">0</strong>
-                        <span>已解锁微信</span>
-                      </div>
-                    </div>
+                    <!-- 会员服务二级子面板 -->
+                    <div id="miniMineVipSubpanel" style="display: none;">
+                      <button class="ghost-button" id="vipSubpanelBackBtn" type="button" style="margin-bottom: 15px; width: auto; padding: 6px 12px; font-size: 13px;">← 返回个人中心</button>
+                      
+                      <div id="vipContent">
+                        <div class="pay-card" style="text-align: center;">
+                          <div style="text-align: left;">
+                            <span class="eyebrow" style="color: var(--teal);">MEDIA PEOPLE VIP</span>
+                            <h3>成为会员后解锁择偶要求</h3>
+                            <p>选择绑定专属红娘，模拟扫码支付 399 元，系统会记录推广红娘并生成分成。</p>
+                          </div>
+                          <div class="qr-box" aria-label="模拟付款二维码" style="margin: 10px auto;">
+                            <span></span><span></span><span></span><span></span>
+                          </div>
 
-                    <!-- 功能选项菜单 -->
-                    <div class="mine-menu-list">
-                      <div class="menu-item">
-                        <span class="menu-label">👑 会员服务</span>
-                        <span id="mineMenuVipStatus">未开通 VIP</span>
+                          <!-- 兑换码兑换区域 -->
+                          <div style="margin: 15px 0; padding: 15px 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); text-align: left; width: 100%;">
+                            <div style="display: grid; gap: 6px;">
+                              <span style="font-weight: 800; color: #0f766e; font-size: 12px;">或者：使用会员兑换码兑换</span>
+                              <div style="display: flex; gap: 8px; margin-top: 6px;">
+                                <input id="vipPromoCodeInput" placeholder="如 VIP666" style="text-transform: uppercase; background: rgba(255, 255, 255, 0.9); flex: 1; min-height: 38px;" />
+                                <button class="primary-button" id="redeemVipBtn" type="button" style="background: var(--teal); border: none; min-width: 80px; min-height: 38px; padding: 0 14px;">确定</button>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div class="form-grid" style="margin-bottom: 15px; text-align: left;">
+                            <div class="wide" style="display: grid; gap: 6px;">
+                              <label for="referralMatchmakerSelect" style="color: var(--muted); font-size: 12px; font-weight: 700;">选择专属红娘 (可输入姓名、推荐码或机构快速筛选)</label>
+                              <div class="searchable-select">
+                                <input id="referralMatchmakerSelect" placeholder="-- 请选择专属红娘 --" autocomplete="off" style="background: white url('data:image/svg+xml;charset=utf-8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;%236d7785&quot; stroke-width=&quot;2&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot;><polyline points=&quot;6 9 12 15 18 9&quot;/></svg>') no-repeat right 12px center/16px; cursor: pointer;" />
+                                <input type="hidden" id="referralCodeInput" />
+                                <div class="select-dropdown" id="matchmakerDropdownPanel" style="display: none;">
+                                  <ul class="dropdown-options" id="matchmakerOptionsList"></ul>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <button class="primary-button" id="becomeVipBtn" type="button" style="width: 100%;">模拟支付并开通</button>
+                          <div id="vipExpiryDate" style="display: none; text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px;"></div>
+                        </div>
                       </div>
-                      <div class="menu-item">
-                        <span class="menu-label">🤝 专属红娘</span>
-                        <span id="mineMenuMatchmaker">待指派</span>
-                      </div>
-                      <div class="menu-item" id="realNameVerificationMenuItem" style="cursor: pointer;">
-                        <span class="menu-label">🛡️ 实名认证</span>
-                        <span class="status-badge orange" id="miniMineRealNameStatus">未认证</span>
-                      </div>
-                      <div class="menu-item">
-                        <span class="menu-label">📞 专属客服</span>
-                        <span class="status-badge gray">hqlak47@gmail.com</span>
-                      </div>
-                    </div>
-
-                    <!-- 账号操作菜单 -->
-                    <div class="pay-card" style="padding: 0;">
-                      <button class="ghost-button" id="miniLogoutBtn" type="button" style="color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05); width: 100%;">退出当前登录</button>
                     </div>
                   </div>
                 </section>

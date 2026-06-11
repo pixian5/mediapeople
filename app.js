@@ -189,13 +189,15 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 function ensureStateDefaults(s) {
   if (!s) return s;
-  if (!s.users) s.users = [];
   s.users.forEach((u) => {
     if (u.phone === undefined) u.phone = null;
     if (u.email === undefined) u.email = null;
     if (u.realNameVerified === undefined) u.realNameVerified = false;
     if (u.realName === undefined) u.realName = null;
     if (u.idCard === undefined) u.idCard = null;
+    if (u.vip && !u.vipExpiresAt) {
+      u.vipExpiresAt = "2027-06-11";
+    }
   });
   // Ensure u1 has phone and email, u2 has only email (no phone) to test phone supplement
   const u1 = s.users.find((u) => u.id === "u1");
@@ -374,11 +376,13 @@ function handleRouting() {
     } else if (path === "/profile") {
       switchMiniTab("profile");
     } else if (path === "/vip") {
-      switchMiniTab("vip");
+      switchMiniTab("mine");
+      showVipSubpanel(true);
     } else if (path === "/requests") {
       switchMiniTab("requests");
     } else if (path === "/my") {
       switchMiniTab("mine");
+      showVipSubpanel(false);
     } else {
       navigate(loggedIn ? "/discover" : "/my", { replace: true });
     }
@@ -440,11 +444,13 @@ function handleRouting() {
       } else if (sub === "/profile") {
         switchMiniTab("profile");
       } else if (sub === "/vip") {
-        switchMiniTab("vip");
+        switchMiniTab("mine");
+        showVipSubpanel(true);
       } else if (sub === "/requests") {
         switchMiniTab("requests");
       } else if (sub === "/my") {
         switchMiniTab("mine");
+        showVipSubpanel(false);
       } else {
         navigate(loggedIn ? "/mini/discover" : "/mini/my", { replace: true });
       }
@@ -635,6 +641,19 @@ function switchMiniTab(tab) {
   if (tabEl) tabEl.classList.add("active");
 }
 
+function showVipSubpanel(visible) {
+  const mainRegistered = $("#miniMineRegisteredMain");
+  const vipSubpanel = $("#miniMineVipSubpanel");
+  if (!mainRegistered || !vipSubpanel) return;
+  if (visible) {
+    mainRegistered.style.display = "none";
+    vipSubpanel.style.display = "block";
+  } else {
+    mainRegistered.style.display = "block";
+    vipSubpanel.style.display = "none";
+  }
+}
+
 function renderFilters() {
   if (!$("#cityFilter")) return;
   const cities = ["全部", ...new Set(state.users.map((user) => user.city))];
@@ -667,6 +686,45 @@ function renderMiniApp() {
   $("#vipState").textContent = user ? (user.vip ? "VIP 会员" : "普通用户") : "游客访客";
   $("#vipState").style.background = user ? (user.vip ? "#d9f7e8" : "#fff1c7") : "#eef2f5";
   $("#vipState").style.color = user ? (user.vip ? "#166534" : "#7a4a08") : "#6d7785";
+
+  // Become VIP Button & Expiry Date update
+  const becomeVipBtn = $("#becomeVipBtn");
+  const vipExpiryDate = $("#vipExpiryDate");
+  if (becomeVipBtn) {
+    if (!user) {
+      becomeVipBtn.textContent = "请先登录/注册";
+      becomeVipBtn.disabled = true;
+      becomeVipBtn.style.background = "#9ca3af";
+      if (vipExpiryDate) vipExpiryDate.style.display = "none";
+    } else if (!user.vip) {
+      becomeVipBtn.textContent = "模拟支付并开通";
+      becomeVipBtn.disabled = false;
+      becomeVipBtn.style.background = ""; 
+      if (vipExpiryDate) vipExpiryDate.style.display = "none";
+    } else {
+      // User is VIP
+      const referralInput = $("#referralCodeInput");
+      const code = referralInput ? referralInput.value.trim() : "";
+      const m = state.matchmakers.find(item => item.code.toUpperCase() === code.toUpperCase());
+      
+      if (m && m.id !== user.referralMatchmakerId) {
+        // Selected matchmaker is different from current referralMatchmakerId
+        becomeVipBtn.textContent = "确认修改红娘并重新开通";
+        becomeVipBtn.disabled = false;
+        becomeVipBtn.style.background = ""; 
+      } else {
+        // Selected is same or none selected
+        becomeVipBtn.textContent = "已是会员";
+        becomeVipBtn.disabled = true;
+        becomeVipBtn.style.background = "#9ca3af"; 
+      }
+      
+      if (vipExpiryDate) {
+        vipExpiryDate.textContent = `会员到期日期: ${user.vipExpiresAt || "2027-06-11"}`;
+        vipExpiryDate.style.display = "block";
+      }
+    }
+  }
   
   // Tab lock control (置灰其它页面 Tab，强行锁定“我的”)
   const tabs = $$("[data-mini-tab]");
@@ -898,6 +956,7 @@ function becomeVip() {
 
   const user = currentUser();
   user.vip = true;
+  user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   user.referralMatchmakerId = matchmaker.id;
   state.deals.unshift({
     id: uid("d"),
@@ -998,6 +1057,14 @@ function redeemVip() {
   }
 
   user.vip = true;
+  user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  
+  const redeemBtn = $("#redeemVipBtn");
+  if (redeemBtn) {
+    redeemBtn.textContent = "有效";
+    redeemBtn.style.background = "#10b981"; // green
+  }
+
   let matchmaker = null;
   if (promoCode.matchmakerId) {
     matchmaker = getMatchmaker(promoCode.matchmakerId);
@@ -1850,6 +1917,7 @@ function bindEvents() {
       selectTrigger.value = val ? label : "";
       renderVipMatchmakers(selectTrigger.value);
       dropdownPanel.style.display = "none";
+      renderMiniApp();
     });
 
     document.addEventListener("click", (e) => {
@@ -1867,11 +1935,32 @@ function bindEvents() {
         } else {
           selectTrigger.value = "";
         }
+        renderMiniApp();
       }
     });
   }
   
   safeBind("#redeemVipBtn", "click", redeemVip);
+
+  // “会员服务”菜单项点击切换至二级面板
+  safeBind("#vipServiceMenuItem", "click", () => {
+    showVipSubpanel(true);
+  });
+
+  // VIP面板返回按钮点击切换回主面板
+  safeBind("#vipSubpanelBackBtn", "click", () => {
+    showVipSubpanel(false);
+  });
+
+  // 用户修改兑换码输入框时重置“确定”按钮
+  const promoInput = $("#vipPromoCodeInput");
+  const promoBtn = $("#redeemVipBtn");
+  if (promoInput && promoBtn) {
+    promoInput.addEventListener("input", () => {
+      promoBtn.textContent = "确定";
+      promoBtn.style.background = "";
+    });
+  }
   
   // 管理员后台兑换码生成按钮绑定
   safeBind("#generatePromoCodeBtn", "click", generateRandomPromoCode);
