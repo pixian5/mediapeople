@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>缘定传媒人 - 单身交友小程序与管理后台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+<div class="app-shell"><main class="main-content">
+<section class="view active" id="adminView">
+          <!-- 管理员登录界面 -->
+          <div class="auth-wrapper" id="adminAuthContainer" style="display: none;">
+            <div class="auth-card" style="max-width: 400px;">
+              <header class="auth-header">
+                <h2>系统管理后台登录</h2>
+                <p>请输入安全校验密码进入单身交友业务中台</p>
+              </header>
+              <form id="adminLoginForm" class="form-grid" style="margin-top: 10px;">
+                <label class="wide">
+                  <span>后台登录密码</span>
+                  <input type="password" id="adminPasswordInput" required placeholder="请输入密码 (默认 admin)" />
+                </label>
+                <button class="primary-button wide" type="submit" style="margin-top: 8px;">安全登录后台</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- 管理后台主界面 -->
+          <div id="adminConsole" style="display: none;">
+            <div class="toolbar">
+              <div>
+                <span class="eyebrow">管理后台</span>
+                <h2>客户、红娘、机构与分成</h2>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button class="primary-button" id="seedDealBtn" type="button">模拟一笔成交</button>
+                <button class="ghost-button" id="adminLogoutBtn" type="button" style="width: auto; color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05);">退出管理员</button>
+              </div>
+            </div>
+
+            <div class="metrics-grid" id="metricsGrid"></div>
+
+            <div class="admin-grid">
+              <section class="panel">
+                <div class="section-title">
+                  <h3>分成比例</h3>
+                  <span>合计需为 100%</span>
+                </div>
+                <form class="split-form" id="splitForm">
+                  <label>
+                    <span>介绍推广费</span>
+                    <input name="promo" type="number" min="0" max="100" />
+                  </label>
+                  <label>
+                    <span>红娘牵线费</span>
+                    <input name="matchmaker" type="number" min="0" max="100" />
+                  </label>
+                  <label>
+                    <span>平台服务费</span>
+                    <input name="platform" type="number" min="0" max="100" />
+                  </label>
+                  <button class="primary-button" type="submit">保存分成</button>
+                </form>
+                <div id="splitPreview" class="split-preview"></div>
+              </section>
+
+              <section class="panel">
+                <div class="section-title">
+                  <h3>添加机构</h3>
+                  <span id="agencyCount">0 家</span>
+                </div>
+                <form class="stack-form" id="agencyForm">
+                  <input name="name" placeholder="机构名称" required />
+                  <input name="city" placeholder="所在城市" required />
+                  <button class="secondary-button" type="submit">添加机构</button>
+                </form>
+                <div id="agencyList" class="plain-list"></div>
+              </section>
+
+              <section class="panel">
+                <div class="section-title">
+                  <h3>添加红娘</h3>
+                  <span id="matchmakerCount">0 位</span>
+                </div>
+                <form class="stack-form" id="matchmakerForm">
+                  <input name="name" placeholder="红娘姓名" required />
+                  <select name="agencyId" required></select>
+                  <input name="code" placeholder="推荐码，如 HM-NANA" required />
+                  <button class="secondary-button" type="submit">添加红娘</button>
+                </form>
+                <div id="matchmakerList" class="plain-list"></div>
+              </section>
+
+              <section class="panel wide-panel">
+                <div class="section-title">
+                  <h3>客户信息</h3>
+                  <span id="customerCount">0 位</span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>客户</th>
+                        <th>城市</th>
+                        <th>会员</th>
+                        <th>推荐红娘</th>
+                        <th>微信</th>
+                      </tr>
+                    </thead>
+                    <tbody id="customerRows"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <!-- 会员兑换码管理 -->
+              <section class="panel wide-panel">
+                <div class="section-title">
+                  <h3>会员兑换码管理</h3>
+                  <button class="secondary-button" id="generatePromoCodeBtn" type="button" style="width: auto;">+ 随机生成兑换码</button>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>兑换码</th>
+                        <th>关联分成红娘</th>
+                        <th>使用状态</th>
+                        <th>使用者客户</th>
+                      </tr>
+                    </thead>
+                    <tbody id="promoCodeRows"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel wide-panel">
+                <div class="section-title">
+                  <h3>图表概览</h3>
+                  <span>客户、成交、金额</span>
+                </div>
+                <div id="chartPanel" class="chart-panel"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js"></script></body></html>

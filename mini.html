@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>缘定传媒人 - 单身交友小程序与管理后台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+<div class="app-shell"><main class="main-content">
+        <section class="view active" id="miniView">
+          <div class="mini-view-layout">
+            <div class="phone-column">
+              <div class="phone-frame">
+                <header class="phone-header">
+                  <div>
+                    <span class="eyebrow">小程序</span>
+                    <h2>找对象</h2>
+                  </div>
+                  <div class="vip-badge" id="vipState">普通用户</div>
+                </header>
+
+                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(5, 1fr);">
+                  <button class="tab active" data-mini-tab="discover">筛选</button>
+                  <button class="tab" data-mini-tab="profile">资料</button>
+                  <button class="tab" data-mini-tab="vip">会员</button>
+                  <button class="tab" data-mini-tab="requests">牵线</button>
+                  <button class="tab" data-mini-tab="mine">我的</button>
+                </div>
+
+                <section class="mini-tab active" id="discoverTab">
+                  <!-- 未登录锁 -->
+                  <div class="mini-lock-overlay" id="discoverLock" style="display: none;">
+                    <div class="lock-content">
+                      <div class="lock-icon">🔒</div>
+                      <h3>开启精彩社交</h3>
+                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                      <button class="primary-button mini-to-register-btn" type="button">去注册 / 登录</button>
+                    </div>
+                  </div>
+                  
+                  <!-- 正常内容 -->
+                  <div id="discoverContent">
+                    <div class="filter-bar">
+                      <label>
+                        <span>性别</span>
+                        <select id="genderFilter">
+                          <option value="女">看女生</option>
+                          <option value="男">看男生</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>城市</span>
+                        <select id="cityFilter"></select>
+                      </label>
+                      <label>
+                        <span>年龄</span>
+                        <select id="ageFilter">
+                          <option value="all">不限</option>
+                          <option value="22-28">22-28</option>
+                          <option value="29-35">29-35</option>
+                          <option value="36-45">36-45</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div id="profileList" class="profile-list"></div>
+                  </div>
+                </section>
+
+                <section class="mini-tab" id="profileTab">
+                  <!-- 未登录锁 -->
+                  <div class="mini-lock-overlay" id="profileLock" style="display: none;">
+                    <div class="lock-content">
+                      <div class="lock-icon">🔒</div>
+                      <h3>完善个人资料</h3>
+                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                      <button class="primary-button mini-to-register-btn" type="button">去登录 / 注册</button>
+                    </div>
+                  </div>
+
+                  <!-- 正常内容 -->
+                  <div id="profileContent">
+                    <form class="form-grid" id="profileForm">
+                      <label>
+                        <span>姓名</span>
+                        <input name="name" required />
+                      </label>
+                      <label>
+                        <span>性别</span>
+                        <select name="gender">
+                          <option>男</option>
+                          <option>女</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>年龄</span>
+                        <input name="age" type="number" min="18" max="70" required />
+                      </label>
+                      <label>
+                        <span>城市</span>
+                        <input name="city" required />
+                      </label>
+                      <label>
+                        <span>职业</span>
+                        <input name="job" required />
+                      </label>
+                      <label>
+                        <span>微信</span>
+                        <input name="wechat" required />
+                      </label>
+                      <label class="wide">
+                        <span>自我介绍</span>
+                        <textarea name="bio" rows="3" required></textarea>
+                      </label>
+                      <label class="wide">
+                        <span>对另一半的要求</span>
+                        <textarea name="requirements" rows="3" required></textarea>
+                      </label>
+                      <button class="primary-button wide" type="submit">保存资料</button>
+                    </form>
+                  </div>
+                </section>
+
+                <section class="mini-tab" id="vipTab">
+                  <!-- 未登录锁 -->
+                  <div class="mini-lock-overlay" id="vipLock" style="display: none;">
+                    <div class="lock-content">
+                      <div class="lock-icon">🔒</div>
+                      <h3>开通会员服务</h3>
+                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                      <button class="primary-button mini-to-register-btn" type="button">去登录 / 注册</button>
+                    </div>
+                  </div>
+                  
+                  <!-- 正常内容 -->
+                  <div id="vipContent">
+                    <div class="pay-card">
+                      <div>
+                        <span class="eyebrow">扫码付费</span>
+                        <h3>成为会员后解锁择偶要求</h3>
+                        <p>选择绑定专属红娘，模拟扫码支付 399 元，系统会记录推广红娘并生成分成。</p>
+                      </div>
+                      <div class="qr-box" aria-label="模拟付款二维码">
+                        <span></span><span></span><span></span><span></span>
+                      </div>
+                      
+                      <div class="form-grid" style="margin-top: 15px; margin-bottom: 15px; text-align: left;">
+                        <label class="wide">
+                          <span>搜索专属红娘（支持拼音或关键字）</span>
+                          <input id="searchMatchmakerInput" type="text" placeholder="输入红娘姓名、推荐码或机构搜索..." style="background: rgba(255, 255, 255, 0.9);" />
+                        </label>
+                        <label class="wide">
+                          <span>选择专属红娘</span>
+                          <select id="referralMatchmakerSelect" style="background: rgba(255, 255, 255, 0.9); height: 40px; border-radius: 6px; border: 1px solid var(--border-color); padding: 0 10px;">
+                            <option value="">-- 请选择专属红娘 --</option>
+                          </select>
+                        </label>
+                        <!-- 隐藏的推荐码输入框，用于后台业务兼容 -->
+                        <input type="hidden" id="referralCodeInput" />
+                      </div>
+                      
+                      <button class="primary-button" id="becomeVipBtn" type="button">模拟支付并开通</button>
+                    </div>
+
+                    <!-- 兑换码兑换区域 -->
+                    <div class="pay-card" style="margin-top: 20px; border-color: rgba(9, 132, 227, 0.15); background: linear-gradient(135deg, rgba(9, 132, 227, 0.02) 0%, rgba(116, 185, 255, 0.05) 100%);">
+                      <div>
+                        <span class="eyebrow" style="background: rgba(9, 132, 227, 0.1); color: #0984e3;">兑换码兑换</span>
+                        <h3>使用会员兑换码</h3>
+                        <p>如果您拥有系统发放的专属会员兑换码，输入并点击兑换即可瞬间开通 VIP 会员。</p>
+                      </div>
+                      
+                      <div class="form-grid" style="margin-top: 15px; margin-bottom: 15px; text-align: left;">
+                        <label class="wide">
+                          <span>会员兑换码</span>
+                          <input id="vipPromoCodeInput" placeholder="如 VIP666" style="text-transform: uppercase; background: rgba(255, 255, 255, 0.9);" />
+                        </label>
+                      </div>
+                      
+                      <button class="primary-button" id="redeemVipBtn" type="button" style="background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%); border: none;">立即兑换开通</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="mini-tab" id="requestsTab">
+                  <!-- 未登录锁 -->
+                  <div class="mini-lock-overlay" id="requestsLock" style="display: none;">
+                    <div class="lock-content">
+                      <div class="lock-icon">🔒</div>
+                      <h3>查看牵线请求</h3>
+                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                      <button class="primary-button mini-to-register-btn" type="button">去登录 / 注册</button>
+                    </div>
+                  </div>
+                  
+                  <!-- 正常内容 -->
+                  <div id="requestsContent">
+                    <div class="section-title">
+                      <h3>我的牵线请求</h3>
+                      <span id="requestCount">0 条</span>
+                    </div>
+                    <div id="myRequests" class="request-list"></div>
+                  </div>
+                </section>
+
+                <section class="mini-tab" id="mineTab">
+                  <!-- 未登录状态 -->
+                  <div id="miniMineUnregistered" style="display: none;">
+                    <div class="pay-card" style="padding: 0 0 16px 0; margin-bottom: 16px; border-bottom: 1px solid var(--line);">
+                      <span class="eyebrow" style="color: var(--coral);">已有客户账号</span>
+                      <h3>一键切换登录</h3>
+                      <div class="stack-form" style="margin-top: 8px; grid-template-columns: 1fr auto;">
+                        <select id="miniSwitchUserSelect" aria-label="选择已有账号" style="flex: 1; min-width: 0;"></select>
+                        <button class="primary-button" id="miniSwitchUserBtn" type="button" style="min-height: 40px;">登录</button>
+                      </div>
+                    </div>
+
+                    <div class="section-title">
+                      <h3>注册新客户账号</h3>
+                    </div>
+                    <form class="form-grid" id="miniRegisterForm">
+                      <label>
+                        <span>姓名</span>
+                        <input name="name" required placeholder="如：小明" />
+                      </label>
+                      <label>
+                        <span>性别</span>
+                        <select name="gender" required>
+                          <option value="女">女</option>
+                          <option value="男">男</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>年龄</span>
+                        <input name="age" type="number" min="18" max="70" required placeholder="如：28" />
+                      </label>
+                      <label>
+                        <span>城市</span>
+                        <input name="city" required placeholder="如：上海" />
+                      </label>
+                      <label>
+                        <span>职业</span>
+                        <input name="job" required placeholder="如：媒体人" />
+                      </label>
+                      <label>
+                        <span>微信</span>
+                        <input name="wechat" required placeholder="请填写微信号" />
+                      </label>
+                      <label class="wide">
+                        <span>个人介绍</span>
+                        <textarea name="bio" rows="2" required placeholder="介绍自己的兴趣爱好等"></textarea>
+                      </label>
+                      <label class="wide">
+                        <span>择偶要求</span>
+                        <textarea name="requirements" rows="2" required placeholder="对另一半的要求"></textarea>
+                      </label>
+                      <button class="primary-button wide" type="submit">立即注册并登录</button>
+                    </form>
+                  </div>
+
+                  <!-- 已登录状态 -->
+                  <div id="miniMineRegistered" style="display: none;">
+                    <!-- 个人中心卡片 -->
+                    <div class="profile-card" style="border: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px;">
+                      <div id="miniMineAvatarBg" style="height: 120px; background-size: cover; background-position: center; border-radius: 8px 8px 0 0;"></div>
+                      <div class="profile-body" style="padding: 16px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                          <strong id="miniMineName" style="font-size: 20px;">林安</strong>
+                          <span class="vip-badge" id="miniMineVip">普通用户</span>
+                        </div>
+                        <div id="miniMineDetails" class="profile-meta" style="margin-top: 4px;">男 · 31 岁 · 上海</div>
+                      </div>
+                    </div>
+
+                    <!-- 数据看板行 -->
+                    <div class="mine-stats-grid">
+                      <div class="stat-item">
+                        <strong id="mineStatRequests">0</strong>
+                        <span>牵线申请</span>
+                      </div>
+                      <div class="stat-item" style="border-left: 1px solid var(--line); border-right: 1px solid var(--line);">
+                        <strong id="mineStatVIP">普通</strong>
+                        <span>会员身份</span>
+                      </div>
+                      <div class="stat-item">
+                        <strong id="mineStatUnlocked">0</strong>
+                        <span>已解锁微信</span>
+                      </div>
+                    </div>
+
+                    <!-- 功能选项菜单 -->
+                    <div class="mine-menu-list">
+                      <div class="menu-item">
+                        <span class="menu-label">👑 会员服务</span>
+                        <span id="mineMenuVipStatus">未开通 VIP</span>
+                      </div>
+                      <div class="menu-item">
+                        <span class="menu-label">🤝 专属红娘</span>
+                        <span id="mineMenuMatchmaker">待指派</span>
+                      </div>
+                      <div class="menu-item">
+                        <span class="menu-label">🛡️ 实名认证</span>
+                        <span class="status-badge green">已认证</span>
+                      </div>
+                      <div class="menu-item">
+                        <span class="menu-label">📞 专属客服</span>
+                        <span class="status-badge gray">hqlak47@gmail.com</span>
+                      </div>
+                    </div>
+
+                    <!-- 账号操作菜单 -->
+                    <div class="pay-card" style="padding: 0;">
+                      <button class="ghost-button" id="miniLogoutBtn" type="button" style="color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05); width: 100%;">退出当前登录</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <!-- 右侧中台助手列 -->
+            <div class="helper-column">
+              <!-- 指引面板 -->
+              <div class="helper-panel guide-card">
+                <div class="panel-header">
+                  <span class="panel-icon">💡</span>
+                  <h3>中台演示操作指南</h3>
+                </div>
+                <div class="panel-body">
+                  <ol class="guide-steps">
+                    <li>在左侧手机模拟器切换至<strong>“我的”</strong>页签，一键登录或填写资料注册客户账号。</li>
+                    <li>在<strong>“筛选”</strong>页签中浏览异性单身会员，并点击<strong>“申请牵线”</strong>（普通用户需先到<strong>“会员”</strong>页签模拟支付开通 VIP）。</li>
+                    <li>点击左侧导航的<strong>“红娘工作台”</strong>，查看并处理收到的牵线请求，点击<strong>“标记已联系双方”</strong>以互相公开微信号。</li>
+                    <li>点击左侧导航的<strong>“管理后台”</strong>，查看业绩分成图表、新增红娘或机构，或者点击<strong>“模拟一笔成交”</strong>。</li>
+                  </ol>
+                  <div class="quick-actions">
+                    <button class="secondary-button" id="quickAddMaleBtn" type="button">👨 快捷生成男会员</button>
+                    <button class="secondary-button" id="quickAddFemaleBtn" type="button">👩 快捷生成女会员</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 微信推送模拟器 -->
+              <div class="helper-panel push-simulator">
+                <div class="panel-header">
+                  <span class="panel-icon">🔔</span>
+                  <h3>实时微信消息推送模拟 (WeChat Push Stream)</h3>
+                </div>
+                <div class="panel-body push-body" id="pushNotificationsList">
+                  <div class="push-empty">
+                    <p>💬 暂无微信消息推送通知</p>
+                    <span>在小程序端注册、开通VIP、申请牵线，或红娘在工作台处理业务时，此面板将实时滑入渲染真实的微信服务号模板消息推送效果。</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 审计日志控制台 -->
+              <div class="helper-panel console-panel">
+                <div class="panel-header">
+                  <span class="panel-icon">📟</span>
+                  <h3>中台业务审计日志 (Audit Logs)</h3>
+                  <button class="clear-log-btn" id="clearConsoleLogsBtn" type="button">清空日志</button>
+                </div>
+                <div class="panel-body console-body" id="consoleLogs">
+                  <!-- 审计日志将动态显示在这里 -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js"></script></body></html>

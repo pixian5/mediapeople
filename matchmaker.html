@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>缘定传媒人 - 单身交友小程序与管理后台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+<div class="app-shell"><main class="main-content">
+<section class="view active" id="matchmakerView">
+          <!-- 红娘登录与注册界面 -->
+          <div class="auth-wrapper" id="matchmakerAuthContainer" style="display: none;">
+            <div class="auth-card">
+              <header class="auth-header">
+                <h2>红娘工作台登录</h2>
+                <p>请选择已有红娘账号登录，或注册新红娘进入工作台</p>
+              </header>
+              
+              <div class="auth-tabs" role="tablist">
+                <button class="auth-tab-btn active" id="mmAuthTabLoginBtn" type="button">已有红娘登录</button>
+                <button class="auth-tab-btn" id="mmAuthTabRegisterBtn" type="button">注册新红娘</button>
+              </div>
+
+              <!-- 登录面板 -->
+              <div class="auth-panel" id="mmAuthLoginPanel">
+                <div class="stack-form" style="grid-template-columns: 1fr auto; margin-top: 10px;">
+                  <select id="mmLoginSelect" aria-label="选择红娘"></select>
+                  <button class="primary-button" id="mmLoginSubmitBtn" type="button" style="min-height: 40px;">一键登录</button>
+                </div>
+              </div>
+
+              <!-- 注册面板 -->
+              <div class="auth-panel" id="mmAuthRegisterPanel" style="display: none;">
+                <form id="mmRegisterForm" class="form-grid" style="margin-top: 10px;">
+                  <label class="wide">
+                    <span>红娘姓名</span>
+                    <input name="name" required placeholder="如：李红娘" />
+                  </label>
+                  <label class="wide">
+                    <span>所属机构</span>
+                    <select name="agencyId" required id="mmRegisterAgencySelect"></select>
+                  </label>
+                  <label class="wide">
+                    <span>唯一推荐码 (用于客户VIP绑定)</span>
+                    <input name="code" required placeholder="如：HM-LILI2" style="text-transform: uppercase;" />
+                  </label>
+                  <button class="primary-button wide" type="submit">立即注册并登录</button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- 红娘工作台主页面 -->
+          <div id="matchmakerWorkbench" style="display: none;">
+            <div class="toolbar">
+              <div>
+                <span class="eyebrow">红娘工作台</span>
+                <h2 id="matchmakerWelcomeTitle">牵线通知与客户联系</h2>
+              </div>
+              <button class="ghost-button" id="mmLogoutBtn" type="button" style="width: auto; color: var(--coral); border-color: rgba(220, 107, 92, 0.3); background: rgba(220, 107, 92, 0.05);">退出登录</button>
+            </div>
+            <div class="workbench-grid">
+              <section class="panel">
+                <div class="section-title">
+                  <h3>应用通知</h3>
+                  <span id="notificationCount">0 条待处理</span>
+                </div>
+                <div id="notificationList" class="request-list"></div>
+              </section>
+              <section class="panel">
+                <div class="section-title">
+                  <h3>双方隐藏联系信息</h3>
+                  <span>仅红娘可见</span>
+                </div>
+                <div id="contactPanel" class="contact-panel"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js"></script></body></html>

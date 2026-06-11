@@ -560,7 +560,8 @@ function switchView(view) {
     item.classList.toggle("active", item.dataset.view === view),
   );
   $$(".view").forEach((panel) => panel.classList.remove("active"));
-  $(`#${view}View`).classList.add("active");
+  const viewEl = $(`#${view}View`);
+  if (viewEl) viewEl.classList.add("active");
 
   const user = currentUser();
   const names = {
@@ -568,7 +569,8 @@ function switchView(view) {
     matchmaker: `红娘：${getMatchmaker(state.selectedMatchmakerId)?.name || "未选择"}`,
     admin: "管理员：平台运营",
   };
-  $("#currentPersona").textContent = names[view];
+  const personaEl = $("#currentPersona");
+  if (personaEl) personaEl.textContent = names[view];
 }
 
 function switchMiniTab(tab) {
@@ -576,10 +578,12 @@ function switchMiniTab(tab) {
     item.classList.toggle("active", item.dataset.miniTab === tab),
   );
   $$(".mini-tab").forEach((panel) => panel.classList.remove("active"));
-  $(`#${tab}Tab`).classList.add("active");
+  const tabEl = $(`#${tab}Tab`);
+  if (tabEl) tabEl.classList.add("active");
 }
 
 function renderFilters() {
+  if (!$("#cityFilter")) return;
   const cities = ["全部", ...new Set(state.users.map((user) => user.city))];
   $("#cityFilter").innerHTML = cities
     .map((city) => `<option value="${city}">${city}</option>`)
@@ -587,6 +591,7 @@ function renderFilters() {
 }
 
 function renderMiniApp() {
+  if (!$("#vipState")) return;
   const user = currentUser();
   renderVipMatchmakers();
   
@@ -1031,6 +1036,7 @@ function generateRandomPromoCode() {
 }
 
 function renderMatchmakerDesk() {
+  if (!$("#matchmakerAuthContainer")) return;
   const mmId = state.selectedMatchmakerId;
   if (!mmId) {
     $("#matchmakerAuthContainer").style.display = "block";
@@ -1116,6 +1122,7 @@ function completeRequest(requestId) {
 }
 
 function renderAdmin() {
+  if (!$("#adminAuthContainer")) return;
   if (!state.adminLoggedIn) {
     $("#adminAuthContainer").style.display = "block";
     $("#adminConsole").style.display = "none";
@@ -1628,6 +1635,13 @@ function quickAddMember(gender) {
   });
 }
 
+function safeBind(selector, event, handler) {
+  const el = $(selector);
+  if (el) {
+    el.addEventListener(event, handler);
+  }
+}
+
 function bindEvents() {
   $$(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1647,9 +1661,11 @@ function bindEvents() {
     button.addEventListener("click", () => {
       if (button.classList.contains("disabled")) {
         const frame = $(".phone-frame");
-        frame.classList.remove("shake");
-        void frame.offsetWidth; // trigger reflow
-        frame.classList.add("shake");
+        if (frame) {
+          frame.classList.remove("shake");
+          void frame.offsetWidth; // trigger reflow
+          frame.classList.add("shake");
+        }
         showToast("请先在“我的”页面登录或注册客户账号");
         return;
       }
@@ -1668,60 +1684,57 @@ function bindEvents() {
       navigate(path);
     });
   });
+  
   ["#genderFilter", "#cityFilter", "#ageFilter"].forEach((selector) => {
-    $(selector).addEventListener("change", renderProfiles);
+    safeBind(selector, "change", renderProfiles);
   });
-  $("#profileList").addEventListener("click", (event) => {
+  
+  safeBind("#profileList", "click", (event) => {
     const button = event.target.closest("[data-connect]");
     if (button) createRequest(button.dataset.connect);
   });
-  $("#notificationList").addEventListener("click", (event) => {
+  
+  safeBind("#notificationList", "click", (event) => {
     const button = event.target.closest("[data-accept]");
     if (button) completeRequest(button.dataset.accept);
   });
-  $("#becomeVipBtn").addEventListener("click", becomeVip);
+
+  safeBind("#becomeVipBtn", "click", becomeVip);
 
   // VIP 会员页面专属红娘筛选、选择与兑换码绑定
-  const searchMmInput = $("#searchMatchmakerInput");
-  if (searchMmInput) {
-    searchMmInput.addEventListener("input", (e) => {
-      renderVipMatchmakers(e.target.value);
-    });
-  }
-  const selectMmSelect = $("#referralMatchmakerSelect");
-  if (selectMmSelect) {
-    selectMmSelect.addEventListener("change", (e) => {
-      $("#referralCodeInput").value = e.target.value;
-    });
-  }
-  const redeemVipBtn = $("#redeemVipBtn");
-  if (redeemVipBtn) {
-    redeemVipBtn.addEventListener("click", redeemVip);
-  }
+  safeBind("#searchMatchmakerInput", "input", (e) => {
+    renderVipMatchmakers(e.target.value);
+  });
+  
+  safeBind("#referralMatchmakerSelect", "change", (e) => {
+    const referralInput = $("#referralCodeInput");
+    if (referralInput) referralInput.value = e.target.value;
+  });
+  
+  safeBind("#redeemVipBtn", "click", redeemVip);
+  
   // 管理员后台兑换码生成按钮绑定
-  const generatePromoCodeBtn = $("#generatePromoCodeBtn");
-  if (generatePromoCodeBtn) {
-    generatePromoCodeBtn.addEventListener("click", generateRandomPromoCode);
-  }
-  $("#profileForm").addEventListener("submit", saveProfile);
-  $("#splitForm").addEventListener("submit", saveSplits);
-  $("#agencyForm").addEventListener("submit", addAgency);
-  $("#matchmakerForm").addEventListener("submit", addMatchmaker);
-  $("#seedDealBtn").addEventListener("click", seedDeal);
-  $("#resetDataBtn").addEventListener("click", resetState);
+  safeBind("#generatePromoCodeBtn", "click", generateRandomPromoCode);
+  
+  safeBind("#profileForm", "submit", saveProfile);
+  safeBind("#splitForm", "submit", saveSplits);
+  safeBind("#agencyForm", "submit", addAgency);
+  safeBind("#matchmakerForm", "submit", addMatchmaker);
+  safeBind("#seedDealBtn", "click", seedDeal);
+  safeBind("#resetDataBtn", "click", resetState);
 
   // 小程序端内置登录/注册/退出/解锁跳转事件
   $$(".mini-to-register-btn").forEach((btn) => {
     btn.addEventListener("click", miniToRegister);
   });
-  $("#miniSwitchUserBtn").addEventListener("click", miniSwitchUser);
-  $("#miniRegisterForm").addEventListener("submit", miniRegisterUser);
-  $("#miniLogoutBtn").addEventListener("click", miniLogoutUser);
+  safeBind("#miniSwitchUserBtn", "click", miniSwitchUser);
+  safeBind("#miniRegisterForm", "submit", miniRegisterUser);
+  safeBind("#miniLogoutBtn", "click", miniLogoutUser);
 
   // 中台快捷助手事件绑定
-  $("#quickAddMaleBtn").addEventListener("click", () => quickAddMember("男"));
-  $("#quickAddFemaleBtn").addEventListener("click", () => quickAddMember("女"));
-  $("#clearConsoleLogsBtn").addEventListener("click", () => {
+  safeBind("#quickAddMaleBtn", "click", () => quickAddMember("男"));
+  safeBind("#quickAddFemaleBtn", "click", () => quickAddMember("女"));
+  safeBind("#clearConsoleLogsBtn", "click", () => {
     const container = $("#consoleLogs");
     if (container) {
       container.innerHTML = "";
@@ -1736,23 +1749,28 @@ function bindEvents() {
     mmTabLogin.addEventListener("click", () => {
       mmTabLogin.classList.add("active");
       mmTabReg.classList.remove("active");
-      $("#mmAuthLoginPanel").classList.add("active");
-      $("#mmAuthRegisterPanel").style.display = "none";
+      const mmAuthLoginPanel = $("#mmAuthLoginPanel");
+      if (mmAuthLoginPanel) mmAuthLoginPanel.classList.add("active");
+      const mmAuthRegisterPanel = $("#mmAuthRegisterPanel");
+      if (mmAuthRegisterPanel) mmAuthRegisterPanel.style.display = "none";
     });
     mmTabReg.addEventListener("click", () => {
       mmTabReg.classList.add("active");
       mmTabLogin.classList.remove("active");
-      $("#mmAuthRegisterPanel").style.display = "block";
-      $("#mmAuthLoginPanel").classList.remove("active");
+      const mmAuthRegisterPanel = $("#mmAuthRegisterPanel");
+      if (mmAuthRegisterPanel) mmAuthRegisterPanel.style.display = "block";
+      const mmAuthLoginPanel = $("#mmAuthLoginPanel");
+      if (mmAuthLoginPanel) mmAuthLoginPanel.classList.remove("active");
     });
   }
-  $("#mmLoginSubmitBtn").addEventListener("click", mmAuthLogin);
-  $("#mmRegisterForm").addEventListener("submit", mmAuthRegister);
-  $("#mmLogoutBtn").addEventListener("click", mmAuthLogout);
+  
+  safeBind("#mmLoginSubmitBtn", "click", mmAuthLogin);
+  safeBind("#mmRegisterForm", "submit", mmAuthRegister);
+  safeBind("#mmLogoutBtn", "click", mmAuthLogout);
 
   // 内置管理员登录/退出事件绑定
-  $("#adminLoginForm").addEventListener("submit", adminAuthLogin);
-  $("#adminLogoutBtn").addEventListener("click", adminAuthLogout);
+  safeBind("#adminLoginForm", "submit", adminAuthLogin);
+  safeBind("#adminLogoutBtn", "click", adminAuthLogout);
 }
 
 bindEvents();
