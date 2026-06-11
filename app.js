@@ -711,6 +711,190 @@ function seedDeal() {
   showToast("已模拟新增一笔成交");
 }
 
+// Account Modal Functions
+function openAccountModal() {
+  const modal = $("#accountModal");
+  modal.style.display = "flex";
+  // Trigger reflow to enable transition animation
+  modal.offsetHeight;
+  modal.classList.add("show");
+
+  // Render switch account dropdown lists
+  renderAccountSwitchLists();
+  // Render matchmaker register agencies list
+  renderRegisterMatchmakerAgencies();
+}
+
+function closeAccountModal() {
+  const modal = $("#accountModal");
+  modal.classList.remove("show");
+  // Hide after animation finishes
+  window.setTimeout(() => {
+    if (!modal.classList.contains("show")) {
+      modal.style.display = "none";
+    }
+  }, 300);
+}
+
+function switchModalTab(tab) {
+  const isRegister = tab === "register";
+  $("#tabRegisterBtn").classList.toggle("active", isRegister);
+  $("#tabSwitchBtn").classList.toggle("active", !isRegister);
+  $("#panelRegister").style.display = isRegister ? "block" : "none";
+  $("#panelSwitch").style.display = isRegister ? "none" : "block";
+}
+
+function handleRegisterRoleChange(event) {
+  const role = event.target.value;
+  const isUser = role === "user";
+  $("#registerUserForm").style.display = isUser ? "grid" : "none";
+  $("#registerMatchmakerForm").style.display = isUser ? "none" : "grid";
+}
+
+function renderAccountSwitchLists() {
+  // Render users list
+  $("#switchUserSelect").innerHTML = state.users
+    .map(
+      (user) =>
+        `<option value="${user.id}" ${user.id === state.currentUserId ? "selected" : ""}>${user.name} (${user.gender} · ${user.age}岁 · ${user.city})</option>`,
+    )
+    .join("");
+
+  // Render matchmakers list
+  $("#switchMatchmakerSelect").innerHTML = state.matchmakers
+    .map(
+      (m) => {
+        const agency = getAgency(m.agencyId);
+        return `<option value="${m.id}" ${m.id === state.selectedMatchmakerId ? "selected" : ""}>${m.name} [${m.code}] (${agency?.name || "未知机构"})</option>`;
+      }
+    )
+    .join("");
+}
+
+function renderRegisterMatchmakerAgencies() {
+  const select = $("#registerMatchmakerForm select[name='agencyId']");
+  if (select) {
+    select.innerHTML = state.agencies
+      .map((agency) => `<option value="${agency.id}">${agency.name}</option>`)
+      .join("");
+  }
+}
+
+// Register User (Customer)
+function registerUser(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const gender = form.elements.gender.value;
+  
+  const femalePhotos = [
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80"
+  ];
+  const malePhotos = [
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?auto=format&fit=crop&w=900&q=80",
+    "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=900&q=80"
+  ];
+  
+  const photoPool = gender === "女" ? femalePhotos : malePhotos;
+  const photo = photoPool[Math.floor(Math.random() * photoPool.length)];
+  const name = form.elements.name.value.trim();
+
+  const newId = uid("u");
+  const newUser = {
+    id: newId,
+    name: name,
+    gender: gender,
+    age: Number(form.elements.age.value),
+    city: form.elements.city.value.trim(),
+    job: form.elements.job.value.trim(),
+    wechat: form.elements.wechat.value.trim(),
+    vip: false,
+    referralMatchmakerId: null,
+    bio: form.elements.bio.value.trim(),
+    requirements: form.elements.requirements.value.trim(),
+    photo: photo
+  };
+
+  state.users.push(newUser);
+  state.currentUserId = newId;
+  
+  form.reset();
+  saveState();
+  closeAccountModal();
+  switchView("mini");
+  renderAll();
+  showToast(`客户 ${name} 注册成功并已登录`);
+}
+
+// Register Matchmaker
+function registerMatchmaker(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const code = form.elements.code.value.trim().toUpperCase();
+
+  // Validate referral code uniqueness
+  const isDuplicate = state.matchmakers.some(
+    (m) => m.code.toUpperCase() === code
+  );
+  if (isDuplicate) {
+    showToast("推荐码已存在，请更换！");
+    return;
+  }
+
+  const name = form.elements.name.value.trim();
+  const newId = uid("m");
+  const newMatchmaker = {
+    id: newId,
+    name: name,
+    agencyId: form.elements.agencyId.value,
+    code: code
+  };
+
+  state.matchmakers.push(newMatchmaker);
+  state.selectedMatchmakerId = newId;
+
+  form.reset();
+  saveState();
+  closeAccountModal();
+  switchView("matchmaker");
+  renderAll();
+  showToast(`红娘 ${name} 注册成功并已登录`);
+}
+
+// Switch Customer
+function switchUser() {
+  const selectedId = $("#switchUserSelect").value;
+  const user = state.users.find((u) => u.id === selectedId);
+  if (!user) return;
+
+  state.currentUserId = selectedId;
+  saveState();
+  closeAccountModal();
+  switchView("mini");
+  renderAll();
+  showToast(`已切换为客户：${user.name}`);
+}
+
+// Switch Matchmaker
+function switchMatchmaker() {
+  const selectedId = $("#switchMatchmakerSelect").value;
+  const m = state.matchmakers.find((item) => item.id === selectedId);
+  if (!m) return;
+
+  state.selectedMatchmakerId = selectedId;
+  saveState();
+  closeAccountModal();
+  switchView("matchmaker");
+  renderAll();
+  showToast(`已切换为红娘：${m.name}`);
+}
+
 function renderAll() {
   renderFilters();
   renderMiniApp();
@@ -748,6 +932,32 @@ function bindEvents() {
   $("#matchmakerForm").addEventListener("submit", addMatchmaker);
   $("#seedDealBtn").addEventListener("click", seedDeal);
   $("#resetDataBtn").addEventListener("click", resetState);
+
+  // 账户模态弹窗事件绑定
+  $("#openAccountModalBtn").addEventListener("click", openAccountModal);
+  $("#closeAccountModalBtn").addEventListener("click", closeAccountModal);
+  $("#accountModal").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) {
+      closeAccountModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && $("#accountModal").style.display === "flex") {
+      closeAccountModal();
+    }
+  });
+
+  $("#tabRegisterBtn").addEventListener("click", () => switchModalTab("register"));
+  $("#tabSwitchBtn").addEventListener("click", () => switchModalTab("switch"));
+  
+  $$("input[name='registerRole']").forEach((radio) => {
+    radio.addEventListener("change", handleRegisterRoleChange);
+  });
+
+  $("#registerUserForm").addEventListener("submit", registerUser);
+  $("#registerMatchmakerForm").addEventListener("submit", registerMatchmaker);
+  $("#switchUserBtn").addEventListener("click", switchUser);
+  $("#switchMatchmakerBtn").addEventListener("click", switchMatchmaker);
 }
 
 bindEvents();

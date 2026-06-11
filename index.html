@@ -25,6 +25,7 @@
           <span class="panel-kicker">当前演示</span>
           <strong id="currentPersona">客户：林安</strong>
           <p>数据保存在本机浏览器，可随时重置体验。</p>
+          <button class="primary-button" id="openAccountModalBtn" type="button" style="width: 100%; margin-bottom: 8px; min-height: 36px; padding: 0 10px; font-size: 13px;">切换/注册账号</button>
           <button class="ghost-button" id="resetDataBtn" type="button">重置演示数据</button>
         </div>
       </aside>
@@ -264,6 +265,117 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <!-- 切换/注册账户模态弹窗 -->
+    <div class="modal-backdrop" id="accountModal" style="display: none;">
+      <div class="modal-content">
+        <header class="modal-header">
+          <h2>账户管理面板</h2>
+          <button class="modal-close" id="closeAccountModalBtn" type="button" aria-label="关闭">&times;</button>
+        </header>
+
+        <!-- Tab 切换 -->
+        <div class="modal-tabs" role="tablist">
+          <button class="modal-tab active" id="tabRegisterBtn" type="button">注册新账户</button>
+          <button class="modal-tab" id="tabSwitchBtn" type="button">切换已有账号</button>
+        </div>
+
+        <!-- 注册面板 -->
+        <div class="modal-tab-panel active" id="panelRegister">
+          <!-- 角色选择 -->
+          <div class="role-selector">
+            <label class="role-option">
+              <input type="radio" name="registerRole" value="user" checked />
+              <span>注册为客户</span>
+            </label>
+            <label class="role-option">
+              <input type="radio" name="registerRole" value="matchmaker" />
+              <span>注册为红娘</span>
+            </label>
+          </div>
+
+          <!-- 客户注册表单 -->
+          <form id="registerUserForm" class="form-grid">
+            <label>
+              <span>姓名</span>
+              <input name="name" required placeholder="如：张美丽" />
+            </label>
+            <label>
+              <span>性别</span>
+              <select name="gender" required>
+                <option value="女">女</option>
+                <option value="男">男</option>
+              </select>
+            </label>
+            <label>
+              <span>年龄</span>
+              <input name="age" type="number" min="18" max="70" required placeholder="如：25" />
+            </label>
+            <label>
+              <span>城市</span>
+              <input name="city" required placeholder="如：上海" />
+            </label>
+            <label>
+              <span>职业</span>
+              <input name="job" required placeholder="如：设计师" />
+            </label>
+            <label>
+              <span>微信</span>
+              <input name="wechat" required placeholder="请填写微信号" />
+            </label>
+            <label class="wide">
+              <span>个人介绍</span>
+              <textarea name="bio" rows="2" required placeholder="一两句话介绍自己，如兴趣爱好等"></textarea>
+            </label>
+            <label class="wide">
+              <span>择偶要求</span>
+              <textarea name="requirements" rows="2" required placeholder="期望对方的年龄、性格、城市等"></textarea>
+            </label>
+            <button class="primary-button wide" type="submit">立即注册并登录客户</button>
+          </form>
+
+          <!-- 红娘注册表单 -->
+          <form id="registerMatchmakerForm" class="form-grid" style="display: none;">
+            <label class="wide">
+              <span>姓名</span>
+              <input name="name" required placeholder="如：李红娘" />
+            </label>
+            <label class="wide">
+              <span>所属机构</span>
+              <select name="agencyId" required></select>
+            </label>
+            <label class="wide">
+              <span>推荐码 (全局唯一)</span>
+              <input name="code" required placeholder="如：HM-LILI2" style="text-transform: uppercase;" />
+            </label>
+            <button class="primary-button wide" type="submit">立即注册并登录红娘</button>
+          </form>
+        </div>
+
+        <!-- 切换账号面板 -->
+        <div class="modal-tab-panel" id="panelSwitch" style="display: none;">
+          <div class="switch-section">
+            <div class="section-title">
+              <h3>切换为已有客户</h3>
+            </div>
+            <div class="stack-form">
+              <select id="switchUserSelect" aria-label="选择客户"></select>
+              <button class="primary-button" id="switchUserBtn" type="button">切换客户</button>
+            </div>
+          </div>
+          
+          <div class="switch-section" style="margin-top: 24px;">
+            <div class="section-title">
+              <h3>切换为已有红娘</h3>
+            </div>
+            <div class="stack-form" style="margin-bottom: 0;">
+              <select id="switchMatchmakerSelect" aria-label="选择红娘"></select>
+              <button class="secondary-button" id="switchMatchmakerBtn" type="button">切换红娘</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
