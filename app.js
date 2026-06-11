@@ -170,6 +170,7 @@ const seedState = {
       photo:
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=60",
     },
+  ],
   requests: [],
   deals: [{ id: "d1", requestId: null, amount: 399, createdAt: "2026-06-10" }],
   promoCodes: [
