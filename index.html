@@ -25,7 +25,7 @@
           <span class="panel-kicker">当前演示</span>
           <strong id="currentPersona">客户：林安</strong>
           <p>数据保存在本机浏览器，可随时重置体验。</p>
-          <button class="primary-button" id="openAccountModalBtn" type="button" style="width: 100%; margin-bottom: 8px; min-height: 36px; padding: 0 10px; font-size: 13px;">切换/注册账号</button>
+          <button class="primary-button" id="openAccountModalBtn" type="button" style="width: 100%; margin-bottom: 8px; min-height: 36px; padding: 0 10px; font-size: 13px;">红娘/后台管理</button>
           <button class="ghost-button" id="resetDataBtn" type="button">重置演示数据</button>
         </div>
       </aside>
@@ -49,96 +49,203 @@
             </div>
 
             <section class="mini-tab active" id="discoverTab">
-              <div class="filter-bar">
-                <label>
-                  <span>性别</span>
-                  <select id="genderFilter">
-                    <option value="女">看女生</option>
-                    <option value="男">看男生</option>
-                  </select>
-                </label>
-                <label>
-                  <span>城市</span>
-                  <select id="cityFilter"></select>
-                </label>
-                <label>
-                  <span>年龄</span>
-                  <select id="ageFilter">
-                    <option value="all">不限</option>
-                    <option value="22-28">22-28</option>
-                    <option value="29-35">29-35</option>
-                    <option value="36-45">36-45</option>
-                  </select>
-                </label>
+              <!-- 未登录锁 -->
+              <div class="mini-lock-overlay" id="discoverLock" style="display: none;">
+                <div class="lock-content">
+                  <div class="lock-icon">🔒</div>
+                  <h3>开启精彩社交</h3>
+                  <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                  <button class="primary-button mini-to-register-btn" type="button">去注册 / 登录</button>
+                </div>
               </div>
-              <div id="profileList" class="profile-list"></div>
+              
+              <!-- 正常内容 -->
+              <div id="discoverContent">
+                <div class="filter-bar">
+                  <label>
+                    <span>性别</span>
+                    <select id="genderFilter">
+                      <option value="女">看女生</option>
+                      <option value="男">看男生</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>城市</span>
+                    <select id="cityFilter"></select>
+                  </label>
+                  <label>
+                    <span>年龄</span>
+                    <select id="ageFilter">
+                      <option value="all">不限</option>
+                      <option value="22-28">22-28</option>
+                      <option value="29-35">29-35</option>
+                      <option value="36-45">36-45</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="profileList" class="profile-list"></div>
+              </div>
             </section>
 
             <section class="mini-tab" id="profileTab">
-              <form class="form-grid" id="profileForm">
-                <label>
-                  <span>姓名</span>
-                  <input name="name" required />
-                </label>
-                <label>
-                  <span>性别</span>
-                  <select name="gender">
-                    <option>男</option>
-                    <option>女</option>
-                  </select>
-                </label>
-                <label>
-                  <span>年龄</span>
-                  <input name="age" type="number" min="18" max="70" required />
-                </label>
-                <label>
-                  <span>城市</span>
-                  <input name="city" required />
-                </label>
-                <label>
-                  <span>职业</span>
-                  <input name="job" required />
-                </label>
-                <label>
-                  <span>微信</span>
-                  <input name="wechat" required />
-                </label>
-                <label class="wide">
-                  <span>自我介绍</span>
-                  <textarea name="bio" rows="3" required></textarea>
-                </label>
-                <label class="wide">
-                  <span>对另一半的要求</span>
-                  <textarea name="requirements" rows="3" required></textarea>
-                </label>
-                <button class="primary-button wide" type="submit">保存资料</button>
-              </form>
+              <!-- 未登录/未注册状态 -->
+              <div id="miniProfileUnregistered" style="display: none;">
+                <div class="pay-card" style="padding: 0 0 16px 0; margin-bottom: 16px; border-bottom: 1px solid var(--line);">
+                  <span class="eyebrow" style="color: var(--coral);">访客身份</span>
+                  <h3>已有客户账号？</h3>
+                  <div class="stack-form" style="margin-top: 8px; grid-template-columns: 1fr auto;">
+                    <select id="miniSwitchUserSelect" aria-label="选择已有账号" style="flex: 1; min-width: 0;"></select>
+                    <button class="primary-button" id="miniSwitchUserBtn" type="button" style="min-height: 40px;">登录</button>
+                  </div>
+                </div>
+
+                <div class="section-title">
+                  <h3>注册新客户账号</h3>
+                </div>
+                <form class="form-grid" id="miniRegisterForm">
+                  <label>
+                    <span>姓名</span>
+                    <input name="name" required placeholder="如：林安" />
+                  </label>
+                  <label>
+                    <span>性别</span>
+                    <select name="gender" required>
+                      <option value="女">女</option>
+                      <option value="男">男</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>年龄</span>
+                    <input name="age" type="number" min="18" max="70" required placeholder="如：28" />
+                  </label>
+                  <label>
+                    <span>城市</span>
+                    <input name="city" required placeholder="如：上海" />
+                  </label>
+                  <label>
+                    <span>职业</span>
+                    <input name="job" required placeholder="如：媒体人" />
+                  </label>
+                  <label>
+                    <span>微信</span>
+                    <input name="wechat" required placeholder="个人微信号" />
+                  </label>
+                  <label class="wide">
+                    <span>自我介绍</span>
+                    <textarea name="bio" rows="2" required placeholder="一两句话介绍自己，如兴趣爱好等"></textarea>
+                  </label>
+                  <label class="wide">
+                    <span>择偶要求</span>
+                    <textarea name="requirements" rows="2" required placeholder="期望对方的年龄、性格、城市等"></textarea>
+                  </label>
+                  <button class="primary-button wide" type="submit">立即注册并开始交友</button>
+                </form>
+              </div>
+
+              <!-- 已登录状态 -->
+              <div id="miniProfileRegistered" style="display: none;">
+                <div class="profile-account-bar" style="margin-bottom: 16px; padding: 10px 12px; background: #f0f4f8; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div id="miniCurrentAvatar" style="width: 32px; height: 32px; border-radius: 50%; background-size: cover; background-position: center; border: 1px solid var(--line);"></div>
+                    <div>
+                      <strong id="miniCurrentName" style="font-size: 14px;">林安</strong>
+                      <span class="vip-badge" id="miniCurrentVip" style="padding: 2px 6px; font-size: 10px; margin-left: 4px;">普通用户</span>
+                    </div>
+                  </div>
+                  <button class="secondary-button" id="miniLogoutBtn" type="button" style="min-height: 28px; height: 28px; font-size: 11px; padding: 0 10px; font-weight: 700;">退出登录</button>
+                </div>
+
+                <form class="form-grid" id="profileForm">
+                  <label>
+                    <span>姓名</span>
+                    <input name="name" required />
+                  </label>
+                  <label>
+                    <span>性别</span>
+                    <select name="gender">
+                      <option>男</option>
+                      <option>女</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>年龄</span>
+                    <input name="age" type="number" min="18" max="70" required />
+                  </label>
+                  <label>
+                    <span>城市</span>
+                    <input name="city" required />
+                  </label>
+                  <label>
+                    <span>职业</span>
+                    <input name="job" required />
+                  </label>
+                  <label>
+                    <span>微信</span>
+                    <input name="wechat" required />
+                  </label>
+                  <label class="wide">
+                    <span>自我介绍</span>
+                    <textarea name="bio" rows="3" required></textarea>
+                  </label>
+                  <label class="wide">
+                    <span>对另一半的要求</span>
+                    <textarea name="requirements" rows="3" required></textarea>
+                  </label>
+                  <button class="primary-button wide" type="submit">保存资料</button>
+                </form>
+              </div>
             </section>
 
             <section class="mini-tab" id="vipTab">
-              <div class="pay-card">
-                <div>
-                  <span class="eyebrow">扫码付费</span>
-                  <h3>成为会员后解锁择偶要求</h3>
-                  <p>输入红娘推荐码，模拟扫码支付 399 元，系统会记录推广红娘并生成分成。</p>
+              <!-- 未登录锁 -->
+              <div class="mini-lock-overlay" id="vipLock" style="display: none;">
+                <div class="lock-content">
+                  <div class="lock-icon">🔒</div>
+                  <h3>开通会员服务</h3>
+                  <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                  <button class="primary-button mini-to-register-btn" type="button">去注册 / 登录</button>
                 </div>
-                <div class="qr-box" aria-label="模拟付款二维码">
-                  <span></span><span></span><span></span><span></span>
+              </div>
+              
+              <!-- 正常内容 -->
+              <div id="vipContent">
+                <div class="pay-card">
+                  <div>
+                    <span class="eyebrow">扫码付费</span>
+                    <h3>成为会员后解锁择偶要求</h3>
+                    <p>输入红娘推荐码，模拟扫码支付 399 元，系统会记录推广红娘并生成分成。</p>
+                  </div>
+                  <div class="qr-box" aria-label="模拟付款二维码">
+                    <span></span><span></span><span></span><span></span>
+                  </div>
+                  <label>
+                    <span>红娘推荐码</span>
+                    <input id="referralCodeInput" placeholder="如 HM-LILI" />
+                  </label>
+                  <button class="primary-button" id="becomeVipBtn" type="button">模拟支付并开通</button>
                 </div>
-                <label>
-                  <span>红娘推荐码</span>
-                  <input id="referralCodeInput" placeholder="如 HM-LILI" />
-                </label>
-                <button class="primary-button" id="becomeVipBtn" type="button">模拟支付并开通</button>
               </div>
             </section>
 
             <section class="mini-tab" id="requestsTab">
-              <div class="section-title">
-                <h3>我的牵线请求</h3>
-                <span id="requestCount">0 条</span>
+              <!-- 未登录锁 -->
+              <div class="mini-lock-overlay" id="requestsLock" style="display: none;">
+                <div class="lock-content">
+                  <div class="lock-icon">🔒</div>
+                  <h3>查看牵线请求</h3>
+                  <p>您当前以游客身份访问，请先注册或登录个人账号</p>
+                  <button class="primary-button mini-to-register-btn" type="button">去注册 / 登录</button>
+                </div>
               </div>
-              <div id="myRequests" class="request-list"></div>
+              
+              <!-- 正常内容 -->
+              <div id="requestsContent">
+                <div class="section-title">
+                  <h3>我的牵线请求</h3>
+                  <span id="requestCount">0 条</span>
+                </div>
+                <div id="myRequests" class="request-list"></div>
+              </div>
             </section>
           </div>
         </section>
@@ -267,76 +374,23 @@
       </main>
     </div>
 
-    <!-- 切换/注册账户模态弹窗 -->
+    <!-- 红娘管理模态弹窗 -->
     <div class="modal-backdrop" id="accountModal" style="display: none;">
       <div class="modal-content">
         <header class="modal-header">
-          <h2>账户管理面板</h2>
+          <h2>红娘管理面板</h2>
           <button class="modal-close" id="closeAccountModalBtn" type="button" aria-label="关闭">&times;</button>
         </header>
 
         <!-- Tab 切换 -->
         <div class="modal-tabs" role="tablist">
-          <button class="modal-tab active" id="tabRegisterBtn" type="button">注册新账户</button>
-          <button class="modal-tab" id="tabSwitchBtn" type="button">切换已有账号</button>
+          <button class="modal-tab active" id="tabRegisterBtn" type="button">注册新红娘</button>
+          <button class="modal-tab" id="tabSwitchBtn" type="button">切换已有红娘</button>
         </div>
 
-        <!-- 注册面板 -->
+        <!-- 注册红娘面板 -->
         <div class="modal-tab-panel active" id="panelRegister">
-          <!-- 角色选择 -->
-          <div class="role-selector">
-            <label class="role-option">
-              <input type="radio" name="registerRole" value="user" checked />
-              <span>注册为客户</span>
-            </label>
-            <label class="role-option">
-              <input type="radio" name="registerRole" value="matchmaker" />
-              <span>注册为红娘</span>
-            </label>
-          </div>
-
-          <!-- 客户注册表单 -->
-          <form id="registerUserForm" class="form-grid">
-            <label>
-              <span>姓名</span>
-              <input name="name" required placeholder="如：张美丽" />
-            </label>
-            <label>
-              <span>性别</span>
-              <select name="gender" required>
-                <option value="女">女</option>
-                <option value="男">男</option>
-              </select>
-            </label>
-            <label>
-              <span>年龄</span>
-              <input name="age" type="number" min="18" max="70" required placeholder="如：25" />
-            </label>
-            <label>
-              <span>城市</span>
-              <input name="city" required placeholder="如：上海" />
-            </label>
-            <label>
-              <span>职业</span>
-              <input name="job" required placeholder="如：设计师" />
-            </label>
-            <label>
-              <span>微信</span>
-              <input name="wechat" required placeholder="请填写微信号" />
-            </label>
-            <label class="wide">
-              <span>个人介绍</span>
-              <textarea name="bio" rows="2" required placeholder="一两句话介绍自己，如兴趣爱好等"></textarea>
-            </label>
-            <label class="wide">
-              <span>择偶要求</span>
-              <textarea name="requirements" rows="2" required placeholder="期望对方的年龄、性格、城市等"></textarea>
-            </label>
-            <button class="primary-button wide" type="submit">立即注册并登录客户</button>
-          </form>
-
-          <!-- 红娘注册表单 -->
-          <form id="registerMatchmakerForm" class="form-grid" style="display: none;">
+          <form id="registerMatchmakerForm" class="form-grid">
             <label class="wide">
               <span>姓名</span>
               <input name="name" required placeholder="如：李红娘" />
@@ -353,25 +407,15 @@
           </form>
         </div>
 
-        <!-- 切换账号面板 -->
+        <!-- 切换红娘面板 -->
         <div class="modal-tab-panel" id="panelSwitch" style="display: none;">
-          <div class="switch-section">
+          <div class="switch-section" style="margin-bottom: 0;">
             <div class="section-title">
-              <h3>切换为已有客户</h3>
+              <h3>选择红娘账号登录</h3>
             </div>
-            <div class="stack-form">
-              <select id="switchUserSelect" aria-label="选择客户"></select>
-              <button class="primary-button" id="switchUserBtn" type="button">切换客户</button>
-            </div>
-          </div>
-          
-          <div class="switch-section" style="margin-top: 24px;">
-            <div class="section-title">
-              <h3>切换为已有红娘</h3>
-            </div>
-            <div class="stack-form" style="margin-bottom: 0;">
-              <select id="switchMatchmakerSelect" aria-label="选择红娘"></select>
-              <button class="secondary-button" id="switchMatchmakerBtn" type="button">切换红娘</button>
+            <div class="stack-form" style="margin-bottom: 0; grid-template-columns: 1fr auto;">
+              <select id="switchMatchmakerSelect" aria-label="选择红娘" style="flex: 1; min-width: 0;"></select>
+              <button class="primary-button" id="switchMatchmakerBtn" type="button" style="min-height: 40px;">一键切换</button>
             </div>
           </div>
         </div>

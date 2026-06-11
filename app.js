@@ -295,8 +295,9 @@ function switchView(view) {
   $$(".view").forEach((panel) => panel.classList.remove("active"));
   $(`#${view}View`).classList.add("active");
 
+  const user = currentUser();
   const names = {
-    mini: `客户：${currentUser().name}`,
+    mini: user ? `客户：${user.name}` : "客户：未登录",
     matchmaker: `红娘：${getMatchmaker(state.selectedMatchmakerId)?.name || "未选择"}`,
     admin: "管理员：平台运营",
   };
@@ -320,22 +321,58 @@ function renderFilters() {
 
 function renderMiniApp() {
   const user = currentUser();
-  $("#vipState").textContent = user.vip ? "VIP 会员" : "普通用户";
-  $("#vipState").style.background = user.vip ? "#d9f7e8" : "#fff1c7";
-  $("#vipState").style.color = user.vip ? "#166534" : "#7a4a08";
-  renderProfileForm();
+  
+  // VIP Badge
+  $("#vipState").textContent = user ? (user.vip ? "VIP 会员" : "普通用户") : "游客访客";
+  $("#vipState").style.background = user ? (user.vip ? "#d9f7e8" : "#fff1c7") : "#eef2f5";
+  $("#vipState").style.color = user ? (user.vip ? "#166534" : "#7a4a08") : "#6d7785";
+  
+  // VIP Tab lock
+  if (!user) {
+    $("#vipLock").style.display = "flex";
+    $("#vipContent").style.display = "none";
+  } else {
+    $("#vipLock").style.display = "none";
+    $("#vipContent").style.display = "block";
+  }
+
+  renderProfileTabContent();
   renderProfiles();
   renderRequests();
 }
 
-function renderProfileForm() {
-  const form = $("#profileForm");
+function renderProfileTabContent() {
   const user = currentUser();
-  Object.entries(user).forEach(([key, value]) => {
-    if (form.elements[key]) {
-      form.elements[key].value = value;
-    }
-  });
+  if (!user) {
+    $("#miniProfileUnregistered").style.display = "block";
+    $("#miniProfileRegistered").style.display = "none";
+    
+    // Render dropdown for switching accounts inside mini app
+    $("#miniSwitchUserSelect").innerHTML = state.users
+      .map(
+        (u) =>
+          `<option value="${u.id}">${u.name} (${u.gender} · ${u.age}岁 · ${u.city})</option>`,
+      )
+      .join("");
+  } else {
+    $("#miniProfileUnregistered").style.display = "none";
+    $("#miniProfileRegistered").style.display = "block";
+    
+    const form = $("#profileForm");
+    Object.entries(user).forEach(([key, value]) => {
+      if (form.elements[key]) {
+        form.elements[key].value = value;
+      }
+    });
+    
+    $("#miniCurrentAvatar").style.backgroundImage = `url('${user.photo}')`;
+    $("#miniCurrentName").textContent = user.name;
+    
+    const badge = $("#miniCurrentVip");
+    badge.textContent = user.vip ? "VIP 会员" : "普通用户";
+    badge.style.background = user.vip ? "#d9f7e8" : "#fff1c7";
+    badge.style.color = user.vip ? "#166534" : "#7a4a08";
+  }
 }
 
 function matchesAge(age, range) {
@@ -346,6 +383,14 @@ function matchesAge(age, range) {
 
 function renderProfiles() {
   const user = currentUser();
+  if (!user) {
+    $("#discoverLock").style.display = "flex";
+    $("#discoverContent").style.display = "none";
+    return;
+  }
+  $("#discoverLock").style.display = "none";
+  $("#discoverContent").style.display = "block";
+
   const gender = $("#genderFilter").value;
   const city = $("#cityFilter").value || "全部";
   const ageRange = $("#ageFilter").value;
@@ -420,6 +465,14 @@ function createRequest(targetUserId) {
 
 function renderRequests() {
   const user = currentUser();
+  if (!user) {
+    $("#requestsLock").style.display = "flex";
+    $("#requestsContent").style.display = "none";
+    return;
+  }
+  $("#requestsLock").style.display = "none";
+  $("#requestsContent").style.display = "block";
+
   const requests = state.requests.filter(
     (request) => request.fromUserId === user.id || request.toUserId === user.id,
   );
@@ -711,7 +764,7 @@ function seedDeal() {
   showToast("已模拟新增一笔成交");
 }
 
-// Account Modal Functions
+// Account Modal Functions (Matchmaker only)
 function openAccountModal() {
   const modal = $("#accountModal");
   modal.style.display = "flex";
@@ -744,22 +797,7 @@ function switchModalTab(tab) {
   $("#panelSwitch").style.display = isRegister ? "none" : "block";
 }
 
-function handleRegisterRoleChange(event) {
-  const role = event.target.value;
-  const isUser = role === "user";
-  $("#registerUserForm").style.display = isUser ? "grid" : "none";
-  $("#registerMatchmakerForm").style.display = isUser ? "none" : "grid";
-}
-
 function renderAccountSwitchLists() {
-  // Render users list
-  $("#switchUserSelect").innerHTML = state.users
-    .map(
-      (user) =>
-        `<option value="${user.id}" ${user.id === state.currentUserId ? "selected" : ""}>${user.name} (${user.gender} · ${user.age}岁 · ${user.city})</option>`,
-    )
-    .join("");
-
   // Render matchmakers list
   $("#switchMatchmakerSelect").innerHTML = state.matchmakers
     .map(
@@ -780,8 +818,59 @@ function renderRegisterMatchmakerAgencies() {
   }
 }
 
-// Register User (Customer)
-function registerUser(event) {
+// Register Matchmaker
+function registerMatchmaker(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const code = form.elements.code.value.trim().toUpperCase();
+
+  // Validate referral code uniqueness
+  const isDuplicate = state.matchmakers.some(
+    (m) => m.code.toUpperCase() === code
+  );
+  if (isDuplicate) {
+    showToast("推荐码已存在，请更换！");
+    return;
+  }
+
+  const name = form.elements.name.value.trim();
+  const newId = uid("m");
+  const newMatchmaker = {
+    id: newId,
+    name: name,
+    agencyId: form.elements.agencyId.value,
+    code: code
+  };
+
+  state.matchmakers.push(newMatchmaker);
+  state.selectedMatchmakerId = newId;
+
+  form.reset();
+  saveState();
+  closeAccountModal();
+  switchView("matchmaker");
+  renderAll();
+  showToast(`红娘 ${name} 注册成功并已登录`);
+}
+
+// Switch Matchmaker
+function switchMatchmaker() {
+  const selectedId = $("#switchMatchmakerSelect").value;
+  const m = state.matchmakers.find((item) => item.id === selectedId);
+  if (!m) return;
+
+  state.selectedMatchmakerId = selectedId;
+  saveState();
+  closeAccountModal();
+  switchView("matchmaker");
+  renderAll();
+  showToast(`已切换为红娘：${m.name}`);
+}
+
+// --- Mini Program Native Account Functions ---
+
+// Mini Program Client Register User
+function miniRegisterUser(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const gender = form.elements.gender.value;
@@ -832,76 +921,6 @@ function registerUser(event) {
   showToast(`客户 ${name} 注册成功并已登录`);
 }
 
-// Register Matchmaker
-function registerMatchmaker(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const code = form.elements.code.value.trim().toUpperCase();
-
-  // Validate referral code uniqueness
-  const isDuplicate = state.matchmakers.some(
-    (m) => m.code.toUpperCase() === code
-  );
-  if (isDuplicate) {
-    showToast("推荐码已存在，请更换！");
-    return;
-  }
-
-  const name = form.elements.name.value.trim();
-  const newId = uid("m");
-  const newMatchmaker = {
-    id: newId,
-    name: name,
-    agencyId: form.elements.agencyId.value,
-    code: code
-  };
-
-  state.matchmakers.push(newMatchmaker);
-  state.selectedMatchmakerId = newId;
-
-  form.reset();
-  saveState();
-  closeAccountModal();
-  switchView("matchmaker");
-  renderAll();
-  showToast(`红娘 ${name} 注册成功并已登录`);
-}
-
-// Switch Customer
-function switchUser() {
-  const selectedId = $("#switchUserSelect").value;
-  const user = state.users.find((u) => u.id === selectedId);
-  if (!user) return;
-
-  state.currentUserId = selectedId;
-  saveState();
-  closeAccountModal();
-  switchView("mini");
-  renderAll();
-  showToast(`已切换为客户：${user.name}`);
-}
-
-// Switch Matchmaker
-function switchMatchmaker() {
-  const selectedId = $("#switchMatchmakerSelect").value;
-  const m = state.matchmakers.find((item) => item.id === selectedId);
-  if (!m) return;
-
-  state.selectedMatchmakerId = selectedId;
-  saveState();
-  closeAccountModal();
-  switchView("matchmaker");
-  renderAll();
-  showToast(`已切换为红娘：${m.name}`);
-}
-
-function renderAll() {
-  renderFilters();
-  renderMiniApp();
-  renderMatchmakerDesk();
-  renderAdmin();
-}
-
 function bindEvents() {
   $$(".nav-item").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
@@ -933,7 +952,7 @@ function bindEvents() {
   $("#seedDealBtn").addEventListener("click", seedDeal);
   $("#resetDataBtn").addEventListener("click", resetState);
 
-  // 账户模态弹窗事件绑定
+  // 红娘管理模态弹窗事件绑定
   $("#openAccountModalBtn").addEventListener("click", openAccountModal);
   $("#closeAccountModalBtn").addEventListener("click", closeAccountModal);
   $("#accountModal").addEventListener("click", (event) => {
@@ -950,14 +969,16 @@ function bindEvents() {
   $("#tabRegisterBtn").addEventListener("click", () => switchModalTab("register"));
   $("#tabSwitchBtn").addEventListener("click", () => switchModalTab("switch"));
   
-  $$("input[name='registerRole']").forEach((radio) => {
-    radio.addEventListener("change", handleRegisterRoleChange);
-  });
-
-  $("#registerUserForm").addEventListener("submit", registerUser);
   $("#registerMatchmakerForm").addEventListener("submit", registerMatchmaker);
-  $("#switchUserBtn").addEventListener("click", switchUser);
   $("#switchMatchmakerBtn").addEventListener("click", switchMatchmaker);
+
+  // 小程序端内置登录/注册/退出/解锁跳转事件
+  $$(".mini-to-register-btn").forEach((btn) => {
+    btn.addEventListener("click", miniToRegister);
+  });
+  $("#miniSwitchUserBtn").addEventListener("click", miniSwitchUser);
+  $("#miniRegisterForm").addEventListener("submit", miniRegisterUser);
+  $("#miniLogoutBtn").addEventListener("click", miniLogoutUser);
 }
 
 bindEvents();
