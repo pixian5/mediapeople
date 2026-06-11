@@ -170,9 +170,13 @@ const seedState = {
       photo:
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=60",
     },
-  ],
   requests: [],
   deals: [{ id: "d1", requestId: null, amount: 399, createdAt: "2026-06-10" }],
+  promoCodes: [
+    { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
+    { code: "MEDIA888", matchmakerId: "m2", used: false, usedBy: null },
+    { code: "LOVE999", matchmakerId: null, used: false, usedBy: null }
+  ],
 };
 
 let state = structuredClone(seedState);
@@ -461,6 +465,7 @@ function renderAll() {
   renderMiniApp();
   renderMatchmakerDesk();
   renderAdmin();
+  renderPromoCodes();
 }
 
 function showToast(message) {
@@ -583,6 +588,7 @@ function renderFilters() {
 
 function renderMiniApp() {
   const user = currentUser();
+  renderVipMatchmakers();
   
   // VIP Badge
   $("#vipState").textContent = user ? (user.vip ? "VIP 会员" : "普通用户") : "游客访客";
@@ -837,6 +843,191 @@ function becomeVip() {
     "获得分成": `¥${promoComm} (${state.splits.promo}%)`,
     "账单状态": "已结算至红娘钱包"
   });
+}
+
+function renderVipMatchmakers(filterKeyword = "") {
+  const select = $("#referralMatchmakerSelect");
+  if (!select) return;
+
+  const keyword = filterKeyword.trim().toLowerCase();
+  const filtered = state.matchmakers.filter((m) => {
+    const agency = getAgency(m.agencyId);
+    const text = `${m.name} ${m.code} ${agency?.name || ""}`.toLowerCase();
+    return text.includes(keyword);
+  });
+
+  const currentSelectValue = select.value;
+
+  select.innerHTML =
+    `<option value="">-- 请选择专属红娘 --</option>` +
+    filtered
+      .map((m) => {
+        const agency = getAgency(m.agencyId);
+        return `<option value="${m.code}">${m.name} [${m.code}] (${agency?.name || "未知机构"})</option>`;
+      })
+      .join("");
+
+  if (filtered.some((m) => m.code === currentSelectValue)) {
+    select.value = currentSelectValue;
+  }
+}
+
+function redeemVip() {
+  const rawCode = $("#vipPromoCodeInput").value.trim().toUpperCase();
+  if (!rawCode) {
+    showToast("请输入兑换码！");
+    return;
+  }
+
+  if (!state.promoCodes) {
+    state.promoCodes = [];
+  }
+
+  const promoCode = state.promoCodes.find((item) => item.code.toUpperCase() === rawCode);
+  if (!promoCode) {
+    showToast("兑换码无效！请核对或联系客服");
+    return;
+  }
+
+  if (promoCode.used) {
+    showToast("该兑换码已被兑换使用！");
+    return;
+  }
+
+  const user = currentUser();
+  if (!user) {
+    showToast("请先登录客户账号再进行兑换");
+    return;
+  }
+
+  promoCode.used = true;
+  promoCode.usedBy = user.id;
+
+  user.vip = true;
+  let matchmaker = null;
+  if (promoCode.matchmakerId) {
+    matchmaker = getMatchmaker(promoCode.matchmakerId);
+    if (matchmaker) {
+      user.referralMatchmakerId = matchmaker.id;
+    }
+  }
+
+  state.deals.unshift({
+    id: uid("d"),
+    requestId: null,
+    amount: VIP_PRICE,
+    createdAt: new Date().toISOString().slice(0, 10),
+  });
+
+  saveState();
+  renderAll();
+  $("#vipPromoCodeInput").value = "";
+
+  if (matchmaker) {
+    showToast(`兑换成功！专属红娘为${matchmaker.name}`);
+    const promoComm = (VIP_PRICE * (state.splits.promo / 100)).toFixed(2);
+    const matchComm = (VIP_PRICE * (state.splits.matchmaker / 100)).toFixed(2);
+    const platformComm = (VIP_PRICE * (state.splits.platform / 100)).toFixed(2);
+
+    logEvent("deal", `客户 '${user.name}' 使用兑换码 '${rawCode}' 成功开通 VIP 会员，关联推荐红娘: '${matchmaker.name}'`);
+    logEvent("deal", `[佣金结算] 介绍推广分成: ¥${promoComm} (${state.splits.promo}%)，红娘牵线分成: ¥${matchComm} (${state.splits.matchmaker}%)，平台收益: ¥${platformComm} (${state.splits.platform}%)`);
+
+    showPushNotification("【VIP兑换码使用成功】", {
+      "开通客户": user.name,
+      "使用兑换码": rawCode,
+      "专属红娘": matchmaker.name,
+      "红娘代码": matchmaker.code
+    });
+
+    showPushNotification("【红娘推广佣金喜报】", {
+      "收益红娘": matchmaker.name,
+      "开通客户": user.name,
+      "兑换开通奖励": `¥${promoComm} (${state.splits.promo}%)`,
+      "账单状态": "已结算至红娘钱包"
+    });
+  } else {
+    showToast("兑换成功！已升级为 VIP 会员");
+    logEvent("deal", `客户 '${user.name}' 使用无绑定兑换码 '${rawCode}' 成功开通 VIP 会员`);
+    showPushNotification("【VIP兑换码使用成功】", {
+      "开通客户": user.name,
+      "使用兑换码": rawCode,
+      "专属红娘": "无"
+    });
+  }
+}
+
+function renderPromoCodes() {
+  const rows = $("#promoCodeRows");
+  if (!rows) return;
+
+  if (!state.promoCodes) {
+    state.promoCodes = [];
+  }
+
+  rows.innerHTML =
+    state.promoCodes
+      .map((item) => {
+        const mm = item.matchmakerId ? getMatchmaker(item.matchmakerId) : null;
+        const mmText = mm ? `${mm.name} [${mm.code}]` : '<span class="muted">无关联红娘</span>';
+        
+        let statusHtml = "";
+        if (item.used) {
+          statusHtml = `<span class="status-badge gray">已使用</span>`;
+        } else {
+          statusHtml = `<span class="status-badge text-teal" style="background:#e6fffa;color:#0d9488;">可使用</span>`;
+        }
+
+        const userText = item.usedBy ? (state.users.find(u => u.id === item.usedBy)?.name || item.usedBy) : "-";
+
+        return `
+          <tr>
+            <td><strong>${item.code}</strong></td>
+            <td>${mmText}</td>
+            <td>${statusHtml}</td>
+            <td>${userText}</td>
+          </tr>
+        `;
+      })
+      .join("") || `<tr><td colspan="4" class="text-center muted">暂无会员兑换码数据。</td></tr>`;
+}
+
+function generateRandomPromoCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let randomCode = "";
+  for (let i = 0; i < 8; i++) {
+    randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  if (!state.promoCodes) {
+    state.promoCodes = [];
+  }
+  while (state.promoCodes.some((item) => item.code === randomCode)) {
+    randomCode = "";
+    for (let i = 0; i < 8; i++) {
+      randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  }
+
+  let matchmakerId = null;
+  if (state.matchmakers && state.matchmakers.length > 0 && Math.random() > 0.3) {
+    const idx = Math.floor(Math.random() * state.matchmakers.length);
+    matchmakerId = state.matchmakers[idx].id;
+  }
+
+  const newCode = {
+    code: randomCode,
+    matchmakerId: matchmakerId,
+    used: false,
+    usedBy: null,
+  };
+
+  state.promoCodes.unshift(newCode);
+  saveState();
+  renderAll();
+
+  const mm = matchmakerId ? getMatchmaker(matchmakerId) : null;
+  logEvent("sys", `管理员随机生成了新会员兑换码：${randomCode} (关联红娘: ${mm ? mm.name : "无"})`);
+  showToast(`已成功生成兑换码：${randomCode}`);
 }
 
 function renderMatchmakerDesk() {
@@ -1489,6 +1680,29 @@ function bindEvents() {
     if (button) completeRequest(button.dataset.accept);
   });
   $("#becomeVipBtn").addEventListener("click", becomeVip);
+
+  // VIP 会员页面专属红娘筛选、选择与兑换码绑定
+  const searchMmInput = $("#searchMatchmakerInput");
+  if (searchMmInput) {
+    searchMmInput.addEventListener("input", (e) => {
+      renderVipMatchmakers(e.target.value);
+    });
+  }
+  const selectMmSelect = $("#referralMatchmakerSelect");
+  if (selectMmSelect) {
+    selectMmSelect.addEventListener("change", (e) => {
+      $("#referralCodeInput").value = e.target.value;
+    });
+  }
+  const redeemVipBtn = $("#redeemVipBtn");
+  if (redeemVipBtn) {
+    redeemVipBtn.addEventListener("click", redeemVip);
+  }
+  // 管理员后台兑换码生成按钮绑定
+  const generatePromoCodeBtn = $("#generatePromoCodeBtn");
+  if (generatePromoCodeBtn) {
+    generatePromoCodeBtn.addEventListener("click", generateRandomPromoCode);
+  }
   $("#profileForm").addEventListener("submit", saveProfile);
   $("#splitForm").addEventListener("submit", saveSplits);
   $("#agencyForm").addEventListener("submit", addAgency);
