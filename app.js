@@ -32,7 +32,7 @@ const seedState = {
       bio: "喜欢纪录片、城市漫步和认真做饭，工作稳定，想找一个能一起成长的人。",
       requirements: "希望对方真诚、有稳定生活节奏，愿意沟通，也喜欢旅行或阅读。",
       photo:
-        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u2",
@@ -47,7 +47,7 @@ const seedState = {
       bio: "性格温和但有主见，喜欢展览、咖啡和羽毛球，期待长期关系。",
       requirements: "希望男生有责任心，情绪稳定，工作积极，年龄 28-35 岁。",
       photo:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u3",
@@ -62,7 +62,7 @@ const seedState = {
       bio: "常年做项目管理，喜欢高效也珍惜松弛，周末会去爬山。",
       requirements: "希望对方成熟坦诚，尊重彼此事业，有结婚计划。",
       photo:
-        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u4",
@@ -77,7 +77,7 @@ const seedState = {
       bio: "工作在影像行业，生活里比较安静，喜欢骑行、做咖啡和看老电影。",
       requirements: "希望女生独立、善良，能接受偶尔出差，愿意认真经营关系。",
       photo:
-        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u5",
@@ -92,7 +92,7 @@ const seedState = {
       bio: "做内容增长，平时喜欢打网球、听播客，也会认真记录生活里的小事。",
       requirements: "希望对方乐观坦率，愿意一起尝试新鲜事物，工作和生活都有边界感。",
       photo:
-        "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u6",
@@ -107,7 +107,7 @@ const seedState = {
       bio: "喜欢美术馆、手作和城市短途旅行，性格慢热但很重视承诺。",
       requirements: "希望男生真诚稳定，尊重审美和个人空间，年龄 27-34 岁。",
       photo:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u7",
@@ -122,7 +122,7 @@ const seedState = {
       bio: "项目型工作者，节奏有时很紧，但会给重要关系留出确定时间。",
       requirements: "希望对方成熟独立，能坦诚沟通，对家庭和事业都有清晰规划。",
       photo:
-        "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u8",
@@ -137,7 +137,7 @@ const seedState = {
       bio: "常在外地拍摄，喜欢真实的人和有温度的关系，休息时会做瑜伽。",
       requirements: "希望对方心态开放，能理解传媒行业节奏，愿意长期认真相处。",
       photo:
-        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u9",
@@ -152,7 +152,7 @@ const seedState = {
       bio: "互联网产品经理，喜欢潜水、桌游和做计划，正在学习更松弛地生活。",
       requirements: "希望女生有稳定价值观，愿意沟通，彼此支持而不是消耗。",
       photo:
-        "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=300&q=60",
     },
     {
       id: "u10",
@@ -167,7 +167,7 @@ const seedState = {
       bio: "沟通型人格，喜欢剧场、粤菜和海边散步，期待轻松但认真地相处。",
       requirements: "希望对方情绪稳定，有幽默感，能一起面对现实问题。",
       photo:
-        "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=60",
     },
   ],
   requests: [],
@@ -876,18 +876,18 @@ function miniRegisterUser(event) {
   const gender = form.elements.gender.value;
   
   const femalePhotos = [
-    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80"
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=60"
   ];
   const malePhotos = [
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=900&q=80"
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?auto=format&fit=crop&w=300&q=60",
+    "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=300&q=60"
   ];
   
   const photoPool = gender === "女" ? femalePhotos : malePhotos;
