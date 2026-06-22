@@ -507,6 +507,22 @@ function uid(prefix) {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
+async function hashText(text) {
+  if (!window.crypto?.subtle) {
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `demo-fnv-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  }
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function currentUser() {
   return state.users.find((user) => user.id === state.currentUserId);
 }
@@ -639,6 +655,27 @@ function switchMiniTab(tab) {
   $$(".mini-tab").forEach((panel) => panel.classList.remove("active"));
   const tabEl = $(`#${tab}Tab`);
   if (tabEl) tabEl.classList.add("active");
+  renderMineTabContent();
+}
+
+function syncMiniTabFromLocation() {
+  const path = window.location.pathname;
+  const isMiniPath = isMiniView() || path.startsWith("/mini");
+  if (!isMiniPath) return;
+
+  if (path.endsWith("/profile")) {
+    switchMiniTab("profile");
+  } else if (path.endsWith("/requests")) {
+    switchMiniTab("requests");
+  } else if (path.endsWith("/vip")) {
+    switchMiniTab("mine");
+    showVipSubpanel(true);
+  } else if (path.endsWith("/my")) {
+    switchMiniTab("mine");
+    showVipSubpanel(false);
+  } else {
+    switchMiniTab("discover");
+  }
 }
 
 function showVipSubpanel(visible) {
@@ -747,6 +784,7 @@ function renderMiniApp() {
   renderMineTabContent();
   renderProfiles();
   renderRequests();
+  syncMiniTabFromLocation();
 }
 
 function renderProfileForm() {
@@ -1535,10 +1573,32 @@ function mmAuthLogin() {
   showToast(`已登录为红娘：${m.name}`);
 }
 
-function mmAuthRegister(event) {
+async function mmAuthRegister(event) {
   event.preventDefault();
   const form = event.currentTarget;
+  const name = form.elements.name.value.trim();
+  const phone = form.elements.phone.value.trim();
+  const email = form.elements.email.value.trim();
   const code = form.elements.code.value.trim().toUpperCase();
+  const password = form.elements.password.value;
+  const passwordConfirm = form.elements.passwordConfirm.value;
+
+  if (!/^\d{11}$/.test(phone)) {
+    showToast("请输入合法的11位手机号");
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showToast("请输入合法的邮箱地址");
+    return;
+  }
+  if (password.length < 6) {
+    showToast("登录密码至少 6 位");
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showToast("两次输入的密码不一致");
+    return;
+  }
 
   const isDuplicate = state.matchmakers.some(
     (m) => m.code.toUpperCase() === code
@@ -1547,14 +1607,26 @@ function mmAuthRegister(event) {
     showToast("推荐码已存在，请更换！");
     return;
   }
+  if (state.matchmakers.some((m) => m.phone && m.phone === phone)) {
+    showToast("该手机号已注册红娘账号");
+    return;
+  }
+  if (email && state.matchmakers.some((m) => m.email && m.email.toLowerCase() === email.toLowerCase())) {
+    showToast("该邮箱已注册红娘账号");
+    return;
+  }
 
-  const name = form.elements.name.value.trim();
   const newId = uid("m");
   const newMatchmaker = {
     id: newId,
     name: name,
     agencyId: form.elements.agencyId.value,
-    code: code
+    code: code,
+    phone,
+    email: email || null,
+    passwordHash: await hashText(password),
+    status: "active",
+    registeredAt: new Date().toISOString(),
   };
 
   state.matchmakers.push(newMatchmaker);
@@ -1609,12 +1681,14 @@ function adminAuthLogout() {
 
 // Mini Program Client Register User
 // Mini Program Client Register User
-function miniRegisterUser(event) {
+async function miniRegisterUser(event) {
   event.preventDefault();
   const form = event.currentTarget;
   
   const phone = form.elements.phone.value.trim();
   const email = form.elements.email.value.trim();
+  const password = form.elements.password.value;
+  const passwordConfirm = form.elements.passwordConfirm.value;
   if (!phone && !email) {
     showToast("手机号或邮箱必须填写一项！");
     return;
@@ -1625,6 +1699,22 @@ function miniRegisterUser(event) {
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     showToast("请输入合法的邮箱地址");
+    return;
+  }
+  if (password.length < 6) {
+    showToast("登录密码至少 6 位");
+    return;
+  }
+  if (password !== passwordConfirm) {
+    showToast("两次输入的密码不一致");
+    return;
+  }
+  if (phone && state.users.some((user) => user.phone && user.phone === phone)) {
+    showToast("该手机号已注册客户账号");
+    return;
+  }
+  if (email && state.users.some((user) => user.email && user.email.toLowerCase() === email.toLowerCase())) {
+    showToast("该邮箱已注册客户账号");
     return;
   }
 
@@ -1660,6 +1750,9 @@ function miniRegisterUser(event) {
     wechat: form.elements.wechat.value.trim(),
     phone: phone || null,
     email: email || null,
+    passwordHash: await hashText(password),
+    registeredAt: new Date().toISOString(),
+    accountStatus: "active",
     realNameVerified: false,
     realName: null,
     idCard: null,
