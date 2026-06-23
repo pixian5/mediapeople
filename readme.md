@@ -67,7 +67,20 @@ PostgreSQL 使用 Docker Compose 部署，数据目录为：
 
 数据库只绑定服务器本机地址 `127.0.0.1:5432`，不直接暴露公网。服务器上的真实数据库密码保存在 `/opt/mediapeople/.env`，仓库只保留 `.env.example`。
 
-当前后端 API 会把完整业务状态保存到 PostgreSQL 的 `app_state.data` JSONB 字段中。前端启动时优先读取 `/api/state`，修改资料、VIP、牵线、机构、红娘和分成时会同步写回数据库；如果 API 暂时不可用，会降级保存到浏览器 `localStorage`。
+当前后端 API 仍保留 `/api/state` 兼容前端，同时会把完整业务状态保存到 PostgreSQL 的 `app_state.data` JSONB 字段，并同步拆入正式业务表。前端启动时优先读取 `/api/state`，修改资料、VIP、牵线、机构、红娘和分成时会同步写回数据库；如果 API 暂时不可用，会降级保存到浏览器 `localStorage`。
+
+已创建的业务表：
+
+```text
+agencies         机构
+matchmakers     红娘账号
+users           客户账号
+match_requests  牵线请求
+deals           成交/订单演示记录
+promo_codes     会员兑换码
+app_settings    当前登录态、分成比例等运行设置
+app_state       兼容现有前端的完整 JSON 状态
+```
 
 常用维护命令：
 

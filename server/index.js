@@ -207,6 +207,91 @@ async function initDatabase() {
       updated_at timestamptz not null default now()
     )
   `);
+  await pool.query(`
+    create table if not exists agencies (
+      id text primary key,
+      name text not null,
+      city text,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists matchmakers (
+      id text primary key,
+      agency_id text references agencies(id) on delete set null,
+      name text not null,
+      code text not null unique,
+      phone text,
+      email text,
+      status text,
+      password_hash text,
+      registered_at timestamptz,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists users (
+      id text primary key,
+      name text not null,
+      gender text,
+      age integer,
+      city text,
+      job text,
+      wechat text,
+      phone text,
+      email text,
+      vip boolean not null default false,
+      referral_matchmaker_id text references matchmakers(id) on delete set null,
+      password_hash text,
+      account_status text,
+      registered_at timestamptz,
+      real_name_verified boolean not null default false,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists match_requests (
+      id text primary key,
+      from_user_id text references users(id) on delete cascade,
+      to_user_id text references users(id) on delete cascade,
+      matchmaker_id text references matchmakers(id) on delete set null,
+      status text not null,
+      created_at timestamptz,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists deals (
+      id text primary key,
+      request_id text references match_requests(id) on delete set null,
+      amount numeric(12, 2) not null default 0,
+      created_at date,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists promo_codes (
+      code text primary key,
+      matchmaker_id text references matchmakers(id) on delete set null,
+      used boolean not null default false,
+      used_by text references users(id) on delete set null,
+      infinite boolean not null default false,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists app_settings (
+      id text primary key,
+      data jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
   await pool.query(
     `
       insert into app_state (id, data)
@@ -215,6 +300,7 @@ async function initDatabase() {
     `,
     [JSON.stringify(seedState)],
   );
+  await syncNormalizedState(await readState());
 }
 
 function validateState(data) {
@@ -239,14 +325,197 @@ async function readState() {
 }
 
 async function writeState(data) {
-  await pool.query(
-    `
-      update app_state
-      set data = $1::jsonb, updated_at = now()
-      where id = 1
-    `,
-    [JSON.stringify(data)],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      `
+        update app_state
+        set data = $1::jsonb, updated_at = now()
+        where id = 1
+      `,
+      [JSON.stringify(data)],
+    );
+    await syncNormalizedState(data, client);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function asDate(value) {
+  return value || null;
+}
+
+async function syncNormalizedState(data, existingClient = null) {
+  const client = existingClient || (await pool.connect());
+  const ownsClient = !existingClient;
+
+  try {
+    if (ownsClient) {
+      await client.query("begin");
+    }
+
+    await client.query(`
+      truncate table
+        deals,
+        match_requests,
+        promo_codes,
+        users,
+        matchmakers,
+        agencies,
+        app_settings
+      restart identity cascade
+    `);
+
+    for (const agency of data.agencies || []) {
+      await client.query(
+        `
+          insert into agencies (id, name, city, raw)
+          values ($1, $2, $3, $4::jsonb)
+        `,
+        [agency.id, agency.name, agency.city || null, JSON.stringify(agency)],
+      );
+    }
+
+    for (const matchmaker of data.matchmakers || []) {
+      await client.query(
+        `
+          insert into matchmakers (
+            id, agency_id, name, code, phone, email, status, password_hash, registered_at, raw
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        `,
+        [
+          matchmaker.id,
+          matchmaker.agencyId || null,
+          matchmaker.name,
+          matchmaker.code,
+          matchmaker.phone || null,
+          matchmaker.email || null,
+          matchmaker.status || null,
+          matchmaker.passwordHash || null,
+          asDate(matchmaker.registeredAt),
+          JSON.stringify(matchmaker),
+        ],
+      );
+    }
+
+    for (const user of data.users || []) {
+      await client.query(
+        `
+          insert into users (
+            id, name, gender, age, city, job, wechat, phone, email, vip,
+            referral_matchmaker_id, password_hash, account_status, registered_at,
+            real_name_verified, raw
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+        `,
+        [
+          user.id,
+          user.name,
+          user.gender || null,
+          Number.isFinite(Number(user.age)) ? Number(user.age) : null,
+          user.city || null,
+          user.job || null,
+          user.wechat || null,
+          user.phone || null,
+          user.email || null,
+          Boolean(user.vip),
+          user.referralMatchmakerId || null,
+          user.passwordHash || null,
+          user.accountStatus || null,
+          asDate(user.registeredAt),
+          Boolean(user.realNameVerified),
+          JSON.stringify(user),
+        ],
+      );
+    }
+
+    for (const request of data.requests || []) {
+      await client.query(
+        `
+          insert into match_requests (
+            id, from_user_id, to_user_id, matchmaker_id, status, created_at, raw
+          )
+          values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        `,
+        [
+          request.id,
+          request.fromUserId || null,
+          request.toUserId || null,
+          request.matchmakerId || null,
+          request.status || "待红娘联系",
+          asDate(request.createdAt),
+          JSON.stringify(request),
+        ],
+      );
+    }
+
+    for (const deal of data.deals || []) {
+      await client.query(
+        `
+          insert into deals (id, request_id, amount, created_at, raw)
+          values ($1, $2, $3, $4, $5::jsonb)
+        `,
+        [
+          deal.id,
+          deal.requestId || null,
+          Number(deal.amount || 0),
+          asDate(deal.createdAt),
+          JSON.stringify(deal),
+        ],
+      );
+    }
+
+    for (const promoCode of data.promoCodes || []) {
+      await client.query(
+        `
+          insert into promo_codes (code, matchmaker_id, used, used_by, infinite, raw)
+          values ($1, $2, $3, $4, $5, $6::jsonb)
+        `,
+        [
+          promoCode.code,
+          promoCode.matchmakerId || null,
+          Boolean(promoCode.used),
+          promoCode.usedBy || null,
+          Boolean(promoCode.infinite),
+          JSON.stringify(promoCode),
+        ],
+      );
+    }
+
+    await client.query(
+      `
+        insert into app_settings (id, data)
+        values ('runtime', $1::jsonb)
+      `,
+      [
+        JSON.stringify({
+          currentUserId: data.currentUserId || null,
+          selectedMatchmakerId: data.selectedMatchmakerId || null,
+          adminLoggedIn: Boolean(data.adminLoggedIn),
+          splits: data.splits || {},
+        }),
+      ],
+    );
+
+    if (ownsClient) {
+      await client.query("commit");
+    }
+  } catch (error) {
+    if (ownsClient) {
+      await client.query("rollback");
+    }
+    throw error;
+  } finally {
+    if (ownsClient) {
+      client.release();
+    }
+  }
 }
 
 app.get("/api/health", async (_request, response) => {
