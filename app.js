@@ -1,4 +1,5 @@
 const STORAGE_KEY = "mediapeople-dating-demo-v1";
+const SESSION_KEY = `${STORAGE_KEY}:session`;
 const VIP_PRICE = 399;
 const API_BASE = "/api";
 
@@ -182,6 +183,7 @@ const seedState = {
 };
 
 let state = structuredClone(seedState);
+let session = loadSession();
 let apiAvailable = false;
 
 const $ = (selector) => document.querySelector(selector);
@@ -241,8 +243,44 @@ function loadState() {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (apiAvailable) {
-    syncRemoteState();
+    return syncRemoteState();
   }
+  return Promise.resolve();
+}
+
+function loadSession() {
+  const defaults = {
+    currentUserId: "u1",
+    selectedMatchmakerId: null,
+    adminLoggedIn: false,
+  };
+  const saved = localStorage.getItem(SESSION_KEY);
+  if (!saved) return defaults;
+
+  try {
+    return { ...defaults, ...JSON.parse(saved) };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveSession() {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function setCurrentUserId(id) {
+  session.currentUserId = id;
+  saveSession();
+}
+
+function setSelectedMatchmakerId(id) {
+  session.selectedMatchmakerId = id;
+  saveSession();
+}
+
+function setAdminLoggedIn(loggedIn) {
+  session.adminLoggedIn = loggedIn;
+  saveSession();
 }
 
 async function loadRemoteState() {
@@ -364,7 +402,7 @@ function handleRouting() {
   // 路由跳转分发逻辑
   if (isMiniView()) {
     switchView("mini");
-    const loggedIn = !!state.currentUserId;
+    const loggedIn = !!session.currentUserId;
     if (!loggedIn) {
       if (path !== "/my") {
         navigate("/my", { replace: true });
@@ -388,7 +426,7 @@ function handleRouting() {
     }
   } else if (isMatchmakerView()) {
     switchView("matchmaker");
-    const loggedIn = !!state.selectedMatchmakerId;
+    const loggedIn = !!session.selectedMatchmakerId;
     if (path === "/workbench") {
       if (!loggedIn) {
         navigate("/login", { replace: true });
@@ -406,7 +444,7 @@ function handleRouting() {
     }
   } else if (isAdminView()) {
     switchView("admin");
-    const loggedIn = !!state.adminLoggedIn;
+    const loggedIn = !!session.adminLoggedIn;
     if (path === "/console") {
       if (!loggedIn) {
         navigate("/login", { replace: true });
@@ -431,7 +469,7 @@ function handleRouting() {
 
     if (path.startsWith("/mini")) {
       switchView("mini");
-      const loggedIn = !!state.currentUserId;
+      const loggedIn = !!session.currentUserId;
       const sub = path.substring(5);
       if (!loggedIn) {
         if (sub !== "/my") {
@@ -456,7 +494,7 @@ function handleRouting() {
       }
     } else if (path.startsWith("/matchmaker")) {
       switchView("matchmaker");
-      const loggedIn = !!state.selectedMatchmakerId;
+      const loggedIn = !!session.selectedMatchmakerId;
       const sub = path.substring(11);
       if (sub === "/workbench") {
         if (!loggedIn) {
@@ -473,7 +511,7 @@ function handleRouting() {
       }
     } else if (path.startsWith("/admin")) {
       switchView("admin");
-      const loggedIn = !!state.adminLoggedIn;
+      const loggedIn = !!session.adminLoggedIn;
       const sub = path.substring(6);
       if (sub === "/console") {
         if (!loggedIn) {
@@ -524,7 +562,7 @@ async function hashText(text) {
 }
 
 function currentUser() {
-  return state.users.find((user) => user.id === state.currentUserId);
+  return state.users.find((user) => user.id === session.currentUserId);
 }
 
 function getMatchmaker(id) {
@@ -641,7 +679,7 @@ function switchView(view) {
   const user = currentUser();
   const names = {
     mini: user ? `客户：${user.name}` : "客户：未登录",
-    matchmaker: `红娘：${getMatchmaker(state.selectedMatchmakerId)?.name || "未选择"}`,
+    matchmaker: `红娘：${getMatchmaker(session.selectedMatchmakerId)?.name || "未选择"}`,
     admin: "管理员：平台运营",
   };
   const personaEl = $("#currentPersona");
@@ -1231,7 +1269,7 @@ function generateRandomPromoCode() {
 
 function renderMatchmakerDesk() {
   if (!$("#matchmakerAuthContainer")) return;
-  const mmId = state.selectedMatchmakerId;
+  const mmId = session.selectedMatchmakerId;
   if (!mmId) {
     $("#matchmakerAuthContainer").style.display = "block";
     $("#matchmakerWorkbench").style.display = "none";
@@ -1321,7 +1359,7 @@ function completeRequest(requestId) {
 
 function renderAdmin() {
   if (!$("#adminAuthContainer")) return;
-  if (!state.adminLoggedIn) {
+  if (!session.adminLoggedIn) {
     $("#adminAuthContainer").style.display = "block";
     $("#adminConsole").style.display = "none";
     return;
@@ -1569,8 +1607,7 @@ function mmAuthLogin() {
   const m = state.matchmakers.find((item) => item.id === selectedId);
   if (!m) return;
 
-  state.selectedMatchmakerId = selectedId;
-  saveState();
+  setSelectedMatchmakerId(selectedId);
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/workbench" : "/matchmaker/workbench");
   logEvent("match", `红娘 '${m.name}' 成功登录红娘工作台`);
@@ -1634,10 +1671,10 @@ async function mmAuthRegister(event) {
   };
 
   state.matchmakers.push(newMatchmaker);
-  state.selectedMatchmakerId = newId;
+  setSelectedMatchmakerId(newId);
 
   form.reset();
-  saveState();
+  await saveState();
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/workbench" : "/matchmaker/workbench");
   logEvent("match", `新红娘注册并登录成功：${name} [${code}]`);
@@ -1645,11 +1682,10 @@ async function mmAuthRegister(event) {
 }
 
 function mmAuthLogout() {
-  const mm = getMatchmaker(state.selectedMatchmakerId);
+  const mm = getMatchmaker(session.selectedMatchmakerId);
   const name = mm ? mm.name : "未知";
   
-  state.selectedMatchmakerId = null;
-  saveState();
+  setSelectedMatchmakerId(null);
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/login" : "/matchmaker/login");
   logEvent("match", `红娘 '${name}' 已退出工作台登录`);
@@ -1661,8 +1697,7 @@ function adminAuthLogin(event) {
   event.preventDefault();
   const password = $("#adminPasswordInput").value;
   if (password.toLowerCase() === "admin") {
-    state.adminLoggedIn = true;
-    saveState();
+    setAdminLoggedIn(true);
     const is8098 = isAdminView();
     navigate(is8098 ? "/console" : "/admin/console");
     logEvent("sys", "管理员成功安全登录管理控制台");
@@ -1673,8 +1708,7 @@ function adminAuthLogin(event) {
 }
 
 function adminAuthLogout() {
-  state.adminLoggedIn = false;
-  saveState();
+  setAdminLoggedIn(false);
   const is8098 = isAdminView();
   navigate(is8098 ? "/login" : "/admin/login");
   logEvent("sys", "管理员已退出管理控制台");
@@ -1768,7 +1802,7 @@ async function miniRegisterUser(event) {
   };
 
   state.users.push(newUser);
-  state.currentUserId = newId;
+  setCurrentUserId(newId);
   
   form.reset();
   saveState();
@@ -1792,8 +1826,7 @@ function miniSwitchUser() {
   const user = state.users.find((u) => u.id === selectedId);
   if (!user) return;
 
-  state.currentUserId = selectedId;
-  saveState();
+  setCurrentUserId(selectedId);
   const is8096 = isMiniView();
   navigate(is8096 ? "/discover" : "/mini/discover");
   renderAll();
@@ -1812,8 +1845,7 @@ function miniSwitchUser() {
 function miniLogoutUser() {
   const user = currentUser();
   const oldName = user ? user.name : "未知";
-  state.currentUserId = null;
-  saveState();
+  setCurrentUserId(null);
   renderAll();
   showToast("已退出登录，当前为游客模式");
 
@@ -1925,10 +1957,10 @@ function bindEvents() {
       if (view === "mini") {
         navigate("/mini/discover");
       } else if (view === "matchmaker") {
-        const loggedIn = !!state.selectedMatchmakerId;
+        const loggedIn = !!session.selectedMatchmakerId;
         navigate(loggedIn ? "/matchmaker/workbench" : "/matchmaker/login");
       } else if (view === "admin") {
-        const loggedIn = !!state.adminLoggedIn;
+        const loggedIn = !!session.adminLoggedIn;
         navigate(loggedIn ? "/admin/console" : "/admin/login");
       }
     });
