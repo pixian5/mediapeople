@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>缘定传媒人 - 单身交友小程序与管理后台</title>
-    <link rel="stylesheet" href="./styles.css?v=1.0.2" />
+    <title>缘定传媒人 - 客户小程序</title>
+    <link rel="stylesheet" href="/styles.css?v=1.0.9" />
   </head>
   <body data-role="mini" class="role-mini">
-<div class="app-shell"><main class="main-content">
-        <section class="view active" id="miniView">
+    <div class="app-shell role-only-shell">
+      <main class="main-content">
+<section class="view active" id="miniView">
           <div class="mini-view-layout">
             <div class="phone-column">
               <div class="phone-frame">
@@ -20,7 +21,7 @@
                   <div class="vip-badge" id="vipState">普通用户</div>
                 </header>
 
-                 <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(4, 1fr);">
                   <button class="tab active" data-mini-tab="discover">筛选</button>
                   <button class="tab" data-mini-tab="profile">资料</button>
                   <button class="tab" data-mini-tab="requests">牵线</button>
@@ -194,6 +195,14 @@
                         <span>电子邮箱 (与手机号二选一)</span>
                         <input name="email" placeholder="如：example@mail.com" type="email" />
                       </label>
+                      <label>
+                        <span>登录密码</span>
+                        <input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="至少 6 位" />
+                      </label>
+                      <label>
+                        <span>确认密码</span>
+                        <input name="passwordConfirm" type="password" required minlength="6" autocomplete="new-password" placeholder="再次输入密码" />
+                      </label>
                       <label class="wide">
                         <span>个人介绍</span>
                         <textarea name="bio" rows="2" required placeholder="介绍自己的兴趣爱好等"></textarea>
@@ -362,7 +371,10 @@
             </div>
           </div>
         </section>
-  <!-- 实名认证模态弹窗 (Real Name Verification Modal) -->
+      </main>
+    </div>
+
+<!-- 实名认证模态弹窗 (Real Name Verification Modal) -->
   <div class="modal-backdrop" id="realNameModal" style="display: none;">
     <div class="modal-content" style="max-width: 440px;">
       <div class="modal-header">
@@ -415,4 +427,7 @@
     </div>
   </div>
 
-</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js?v=1.0.2"></script></body></html>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js?v=1.0.9"></script>
+  </body>
+</html>

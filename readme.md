@@ -45,7 +45,14 @@ http://uk.sbbz.tech:8097/  红娘工作台入口
 http://uk.sbbz.tech:8098/  管理后台入口
 ```
 
-以上入口共用同一个 API 和 PostgreSQL 数据库，端口只负责区分前端角色界面。
+以上入口共用同一个 API 和 PostgreSQL 数据库，但前端入口已经完全拆开：
+
+```text
+mini.html        只包含客户小程序端
+matchmaker.html  只包含红娘工作台
+admin.html       只包含管理后台
+index.html       综合预览端
+```
 
 服务器部署目录：
 

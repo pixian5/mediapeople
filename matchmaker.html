@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>缘定传媒人 - 单身交友小程序与管理后台</title>
-    <link rel="stylesheet" href="./styles.css?v=1.0.2" />
+    <title>缘定传媒人 - 红娘工作台</title>
+    <link rel="stylesheet" href="/styles.css?v=1.0.9" />
   </head>
   <body data-role="matchmaker" class="role-matchmaker">
-<div class="app-shell"><main class="main-content">
+    <div class="app-shell role-only-shell">
+      <main class="main-content">
 <section class="view active" id="matchmakerView">
           <!-- 红娘登录与注册界面 -->
           <div class="auth-wrapper" id="matchmakerAuthContainer" style="display: none;">
@@ -41,9 +42,25 @@
                     <span>所属机构</span>
                     <select name="agencyId" required id="mmRegisterAgencySelect"></select>
                   </label>
+                  <label>
+                    <span>手机号</span>
+                    <input name="phone" required type="tel" pattern="[0-9]*" placeholder="如：13800138000" />
+                  </label>
+                  <label>
+                    <span>电子邮箱</span>
+                    <input name="email" type="email" placeholder="如：matchmaker@mail.com" />
+                  </label>
                   <label class="wide">
                     <span>唯一推荐码 (用于客户VIP绑定)</span>
                     <input name="code" required placeholder="如：HM-LILI2" style="text-transform: uppercase;" />
+                  </label>
+                  <label>
+                    <span>登录密码</span>
+                    <input name="password" type="password" required minlength="6" autocomplete="new-password" placeholder="至少 6 位" />
+                  </label>
+                  <label>
+                    <span>确认密码</span>
+                    <input name="passwordConfirm" type="password" required minlength="6" autocomplete="new-password" placeholder="再次输入密码" />
                   </label>
                   <button class="primary-button wide" type="submit">立即注册并登录</button>
                 </form>
@@ -78,4 +95,10 @@
             </div>
           </div>
         </section>
-</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js?v=1.0.2"></script></body></html>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js?v=1.0.9"></script>
+  </body>
+</html>

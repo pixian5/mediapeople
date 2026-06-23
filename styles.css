@@ -43,6 +43,14 @@ button {
   min-height: 100vh;
 }
 
+.role-only-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.role-only-shell .main-content {
+  grid-column: 1;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -1485,7 +1493,6 @@ body.role-matchmaker .main-content,
 body.role-admin .main-content {
   padding: 24px;
 }
-
 
 
 
