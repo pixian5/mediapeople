@@ -28,14 +28,21 @@ if echo "$CHANGED_FILES" | grep -q '^server/'; then
   docker compose -f "$REPO_DIR/compose.yml" up -d api 2>&1 | tee -a "$LOG_FILE"
   log "api 容器已重新构建并重启"
 else
-  log "无 server/ 变更，前端文件通过 volume 挂载已立即生效，无需重启"
+  log "无 server/ 变更，前端文件通过 volume 挂载已更新"
 fi
 
-# 同样处理 SSL compose（如果存在）
+# 重建 SSL version API（若有必要）
 if docker ps --format '{{.Names}}' | grep -q 'mediapeople-web-ssl'; then
   if echo "$CHANGED_FILES" | grep -q '^server/'; then
     docker compose -f "$REPO_DIR/compose.ssl.yml" up -d 2>&1 | tee -a "$LOG_FILE"
   fi
 fi
+
+log "正在重载 Nginx 配置以确保禁用 HTML 缓存..."
+for container in mediapeople-web mediapeople-web-mini mediapeople-web-matchmaker mediapeople-web-admin mediapeople-web-ssl mediapeople-web-mini-ssl mediapeople-web-matchmaker-ssl mediapeople-web-admin-ssl; do
+  if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+    docker exec $container nginx -s reload 2>&1 | tee -a "$LOG_FILE" || true
+  fi
+done
 
 log "===== 部署完成 ====="

@@ -403,6 +403,6 @@ HTTPS 9445-9448 正常
 当前前端资源版本：
 
 ```text
-app.js?v=1.0.18
-styles.css?v=1.0.18
+app.js?v=1.0.19
+styles.css?v=1.0.19
 ```
