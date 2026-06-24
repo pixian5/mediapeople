@@ -128,7 +128,21 @@ docker compose -f compose.yml -f compose.ssl.yml up -d --build
 
 ## 部署命令
 
-同步代码到服务器：
+### 一键推送与部署（推荐）
+
+在本地可以直接运行项目根目录下的 `deploy.sh` 脚本。它会自动执行本地语法与配置检查、Git 提交与推送、远程服务器部署以及健康状态检查：
+
+```bash
+# 运行部署并自定义 Commit 信息
+./deploy.sh "这里写你的 commit 说明"
+
+# 或者直接运行（脚本会提示输入 commit 信息，若不输入则使用默认的时间戳信息）
+./deploy.sh
+```
+
+### 手动同步与部署（备用）
+
+手动同步代码到服务器：
 
 ```bash
 rsync -az --delete \
@@ -141,6 +155,7 @@ rsync -az --delete \
   -e 'ssh -i ~/.ssh/mediapeople_uk_ed25519 -o StrictHostKeyChecking=accept-new' \
   ./ root@uk.sbbz.tech:/opt/mediapeople/
 ```
+
 
 启动或重建全部服务：
 
