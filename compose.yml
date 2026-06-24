@@ -71,6 +71,8 @@ services:
       PGUSER: ${POSTGRES_USER:-mediapeople}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-mediapeople-dev-secret-change-me}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,8 +1,11 @@
 import express from "express";
 import pg from "pg";
+import crypto from "crypto";
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 3000);
+const TOKEN_SECRET = process.env.JWT_SECRET || process.env.ADMIN_API_TOKEN || "mediapeople-dev-secret-change-me";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
 
 const seedState = {
   currentUserId: "u1",
@@ -319,6 +322,87 @@ function validateState(data) {
   return null;
 }
 
+function base64UrlEncode(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function base64UrlDecode(value) {
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+}
+
+function signToken(payload) {
+  const body = {
+    ...payload,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+  };
+  const encoded = base64UrlEncode(body);
+  const signature = crypto.createHmac("sha256", TOKEN_SECRET).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token || !token.includes(".")) return null;
+  const [encoded, signature] = token.split(".");
+  const expected = crypto.createHmac("sha256", TOKEN_SECRET).update(encoded).digest("base64url");
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  const payload = base64UrlDecode(encoded);
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+
+function getBearerToken(request) {
+  return (request.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+}
+
+function requireAuth(roles = []) {
+  return (request, response, next) => {
+    const payload = verifyToken(getBearerToken(request));
+    if (!payload) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (roles.length && !roles.includes(payload.role)) {
+      response.status(403).json({ error: "forbidden" });
+      return;
+    }
+    request.user = payload;
+    next();
+  };
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `scrypt$${salt}$${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash) return false;
+  if (!storedHash.startsWith("scrypt$")) {
+    return password === storedHash;
+  }
+  const [, salt, hash] = storedHash.split("$");
+  const current = crypto.scryptSync(password, salt, 64);
+  return crypto.timingSafeEqual(current, Buffer.from(hash, "hex"));
+}
+
+function publicState(data) {
+  return {
+    ...data,
+    users: (data.users || []).map(({ passwordHash, idCard, ...user }) => user),
+    matchmakers: (data.matchmakers || []).map(({ passwordHash, ...matchmaker }) => matchmaker),
+  };
+}
+
+function normalizePhone(value) {
+  return String(value || "").trim();
+}
+
+function normalizeEmail(value) {
+  const email = String(value || "").trim();
+  return email ? email.toLowerCase() : null;
+}
+
 async function readState() {
   const result = await pool.query("select data from app_state where id = 1");
   return result.rows[0]?.data || seedState;
@@ -523,23 +607,187 @@ app.get("/api/health", async (_request, response) => {
   response.json({ ok: true });
 });
 
-app.get("/api/state", async (_request, response) => {
-  response.json(await readState());
+app.post("/api/auth/admin/login", async (request, response) => {
+  const { password } = request.body || {};
+  if (String(password || "") !== ADMIN_PASSWORD) {
+    response.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+  response.json({
+    token: signToken({ role: "admin", sub: "admin" }),
+    admin: { id: "admin", name: "平台管理员" },
+  });
 });
 
-app.put("/api/state", async (request, response) => {
+app.post("/api/auth/client/login", async (request, response) => {
+  const { userId, account, password } = request.body || {};
+  const state = await readState();
+  const normalizedAccount = String(account || "").trim().toLowerCase();
+  const user = state.users.find((item) => {
+    if (userId && item.id === userId) return true;
+    return (
+      normalizedAccount &&
+      [item.phone, item.email, item.wechat]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase())
+        .includes(normalizedAccount)
+    );
+  });
+
+  if (!user) {
+    response.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+  if (user.passwordHash && !verifyPassword(String(password || ""), user.passwordHash)) {
+    response.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+
+  response.json({
+    token: signToken({ role: "client", sub: user.id }),
+    user: publicState({ ...state, users: [user] }).users[0],
+  });
+});
+
+app.post("/api/auth/matchmaker/login", async (request, response) => {
+  const { matchmakerId, account, password } = request.body || {};
+  const state = await readState();
+  const normalizedAccount = String(account || "").trim().toLowerCase();
+  const matchmaker = state.matchmakers.find((item) => {
+    if (matchmakerId && item.id === matchmakerId) return true;
+    return (
+      normalizedAccount &&
+      [item.phone, item.email, item.code]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase())
+        .includes(normalizedAccount)
+    );
+  });
+
+  if (!matchmaker) {
+    response.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+  if (matchmaker.passwordHash && !verifyPassword(String(password || ""), matchmaker.passwordHash)) {
+    response.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+
+  response.json({
+    token: signToken({ role: "matchmaker", sub: matchmaker.id }),
+    matchmaker: publicState({ ...state, matchmakers: [matchmaker] }).matchmakers[0],
+  });
+});
+
+app.post("/api/auth/client/register", async (request, response) => {
+  const input = request.body || {};
+  const state = await readState();
+  const phone = normalizePhone(input.phone);
+  const email = normalizeEmail(input.email);
+  if (!phone && !email) {
+    response.status(400).json({ error: "phone_or_email_required" });
+    return;
+  }
+  if (phone && state.users.some((user) => user.phone === phone)) {
+    response.status(409).json({ error: "phone_exists" });
+    return;
+  }
+  if (email && state.users.some((user) => normalizeEmail(user.email) === email)) {
+    response.status(409).json({ error: "email_exists" });
+    return;
+  }
+
+  const user = {
+    id: `u${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+    name: String(input.name || "").trim(),
+    gender: input.gender || null,
+    age: Number(input.age || 0),
+    city: String(input.city || "").trim(),
+    job: String(input.job || "").trim(),
+    wechat: String(input.wechat || "").trim(),
+    phone: phone || null,
+    email,
+    passwordHash: hashPassword(String(input.password || "")),
+    registeredAt: new Date().toISOString(),
+    accountStatus: "active",
+    realNameVerified: false,
+    realName: null,
+    idCard: null,
+    vip: false,
+    referralMatchmakerId: null,
+    bio: String(input.bio || "").trim(),
+    requirements: String(input.requirements || "").trim(),
+    photo: input.photo || null,
+  };
+  state.users.push(user);
+  await writeState(state);
+  response.status(201).json({
+    token: signToken({ role: "client", sub: user.id }),
+    user: publicState({ ...state, users: [user] }).users[0],
+    state: publicState(await readState()),
+  });
+});
+
+app.post("/api/auth/matchmaker/register", async (request, response) => {
+  const input = request.body || {};
+  const state = await readState();
+  const phone = normalizePhone(input.phone);
+  const email = normalizeEmail(input.email);
+  const code = String(input.code || "").trim().toUpperCase();
+  if (!phone || !code) {
+    response.status(400).json({ error: "phone_and_code_required" });
+    return;
+  }
+  if (state.matchmakers.some((matchmaker) => matchmaker.code?.toUpperCase() === code)) {
+    response.status(409).json({ error: "code_exists" });
+    return;
+  }
+  if (state.matchmakers.some((matchmaker) => matchmaker.phone === phone)) {
+    response.status(409).json({ error: "phone_exists" });
+    return;
+  }
+  if (email && state.matchmakers.some((matchmaker) => normalizeEmail(matchmaker.email) === email)) {
+    response.status(409).json({ error: "email_exists" });
+    return;
+  }
+
+  const matchmaker = {
+    id: `m${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+    name: String(input.name || "").trim(),
+    agencyId: input.agencyId || null,
+    code,
+    phone,
+    email,
+    passwordHash: hashPassword(String(input.password || "")),
+    status: "active",
+    registeredAt: new Date().toISOString(),
+  };
+  state.matchmakers.push(matchmaker);
+  await writeState(state);
+  response.status(201).json({
+    token: signToken({ role: "matchmaker", sub: matchmaker.id }),
+    matchmaker: publicState({ ...state, matchmakers: [matchmaker] }).matchmakers[0],
+    state: publicState(await readState()),
+  });
+});
+
+app.get("/api/state", async (_request, response) => {
+  response.json(publicState(await readState()));
+});
+
+app.put("/api/state", requireAuth(["admin", "client", "matchmaker"]), async (request, response) => {
   const error = validateState(request.body);
   if (error) {
     response.status(400).json({ error });
     return;
   }
   await writeState(request.body);
-  response.json(await readState());
+  response.json(publicState(await readState()));
 });
 
-app.post("/api/reset", async (_request, response) => {
+app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
   await writeState(seedState);
-  response.json(await readState());
+  response.json(publicState(await readState()));
 });
 
 app.use((error, _request, response, _next) => {

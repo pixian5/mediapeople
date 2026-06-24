@@ -251,9 +251,11 @@ function saveState() {
 
 function loadSession() {
   const defaults = {
-    currentUserId: "u1",
+    currentUserId: null,
     selectedMatchmakerId: null,
     adminLoggedIn: false,
+    token: null,
+    role: null,
   };
   const saved = localStorage.getItem(SESSION_KEY);
   if (!saved) return defaults;
@@ -269,18 +271,47 @@ function saveSession() {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
+function setAuthSession(role, id, token) {
+  session.role = role;
+  session.token = token || null;
+  if (role === "client") {
+    session.currentUserId = id;
+  } else if (role === "matchmaker") {
+    session.selectedMatchmakerId = id;
+  } else if (role === "admin") {
+    session.adminLoggedIn = true;
+  }
+  saveSession();
+}
+
+function authHeaders() {
+  return session.token ? { Authorization: `Bearer ${session.token}` } : {};
+}
+
 function setCurrentUserId(id) {
   session.currentUserId = id;
+  if (!id && session.role === "client") {
+    session.token = null;
+    session.role = null;
+  }
   saveSession();
 }
 
 function setSelectedMatchmakerId(id) {
   session.selectedMatchmakerId = id;
+  if (!id && session.role === "matchmaker") {
+    session.token = null;
+    session.role = null;
+  }
   saveSession();
 }
 
 function setAdminLoggedIn(loggedIn) {
   session.adminLoggedIn = loggedIn;
+  if (!loggedIn && session.role === "admin") {
+    session.token = null;
+    session.role = null;
+  }
   saveSession();
 }
 
@@ -298,7 +329,7 @@ async function syncRemoteState({ keepalive = false, notify = true } = {}) {
   try {
     const response = await fetch(`${API_BASE}/state`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(state),
       keepalive,
     });
@@ -1621,12 +1652,24 @@ function seedDeal() {
 
 // Account Modal Functions (Matchmaker only)
 // --- Matchmaker Built-in Auth Logic ---
-function mmAuthLogin() {
+async function mmAuthLogin() {
   const selectedId = $("#mmLoginSelect").value;
   const m = state.matchmakers.find((item) => item.id === selectedId);
   if (!m) return;
 
-  setSelectedMatchmakerId(selectedId);
+  try {
+    const response = await fetch(`${API_BASE}/auth/matchmaker/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matchmakerId: selectedId }),
+    });
+    if (!response.ok) throw new Error("login failed");
+    const data = await response.json();
+    setAuthSession("matchmaker", selectedId, data.token);
+  } catch (error) {
+    showToast("红娘登录失败，请稍后重试");
+    return;
+  }
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/workbench" : "/matchmaker/workbench");
   logEvent("match", `红娘 '${m.name}' 成功登录红娘工作台`);
@@ -1676,24 +1719,30 @@ async function mmAuthRegister(event) {
     return;
   }
 
-  const newId = uid("m");
-  const newMatchmaker = {
-    id: newId,
-    name: name,
-    agencyId: form.elements.agencyId.value,
-    code: code,
-    phone,
-    email: email || null,
-    passwordHash: await hashText(password),
-    status: "active",
-    registeredAt: new Date().toISOString(),
-  };
+  let data;
+  try {
+    const response = await fetch(`${API_BASE}/auth/matchmaker/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        agencyId: form.elements.agencyId.value,
+        code,
+        phone,
+        email,
+        password,
+      }),
+    });
+    if (!response.ok) throw new Error("register failed");
+    data = await response.json();
+  } catch (error) {
+    showToast("红娘注册失败，请检查手机号、邮箱或推荐码是否重复");
+    return;
+  }
 
-  state.matchmakers.push(newMatchmaker);
-  setSelectedMatchmakerId(newId);
-
+  state = ensureStateDefaults(data.state || state);
+  setAuthSession("matchmaker", data.matchmaker.id, data.token);
   form.reset();
-  await saveState();
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/workbench" : "/matchmaker/workbench");
   logEvent("match", `新红娘注册并登录成功：${name} [${code}]`);
@@ -1712,18 +1761,26 @@ function mmAuthLogout() {
 }
 
 // --- Admin Built-in Auth Logic ---
-function adminAuthLogin(event) {
+async function adminAuthLogin(event) {
   event.preventDefault();
   const password = $("#adminPasswordInput").value;
-  if (password.toLowerCase() === "admin") {
-    setAdminLoggedIn(true);
-    const is8098 = isAdminView();
-    navigate(is8098 ? "/console" : "/admin/console");
-    logEvent("sys", "管理员成功安全登录管理控制台");
-    showToast("管理员登录成功");
-  } else {
+  try {
+    const response = await fetch(`${API_BASE}/auth/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) throw new Error("invalid");
+    const data = await response.json();
+    setAuthSession("admin", "admin", data.token);
+  } catch (error) {
     showToast("密码错误！默认演示密码为 admin");
+    return;
   }
+  const is8098 = isAdminView();
+  navigate(is8098 ? "/console" : "/admin/console");
+  logEvent("sys", "管理员成功安全登录管理控制台");
+  showToast("管理员登录成功");
 }
 
 function adminAuthLogout() {
@@ -1796,35 +1853,36 @@ async function miniRegisterUser(event) {
   const photo = photoPool[Math.floor(Math.random() * photoPool.length)];
   const name = form.elements.name.value.trim();
 
-  const newId = uid("u");
-  const newUser = {
-    id: newId,
-    name: name,
-    gender: gender,
-    age: Number(form.elements.age.value),
-    city: form.elements.city.value.trim(),
-    job: form.elements.job.value.trim(),
-    wechat: form.elements.wechat.value.trim(),
-    phone: phone || null,
-    email: email || null,
-    passwordHash: await hashText(password),
-    registeredAt: new Date().toISOString(),
-    accountStatus: "active",
-    realNameVerified: false,
-    realName: null,
-    idCard: null,
-    vip: false,
-    referralMatchmakerId: null,
-    bio: form.elements.bio.value.trim(),
-    requirements: form.elements.requirements.value.trim(),
-    photo: photo
-  };
+  let data;
+  try {
+    const response = await fetch(`${API_BASE}/auth/client/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        gender,
+        age: Number(form.elements.age.value),
+        city: form.elements.city.value.trim(),
+        job: form.elements.job.value.trim(),
+        wechat: form.elements.wechat.value.trim(),
+        phone,
+        email,
+        password,
+        bio: form.elements.bio.value.trim(),
+        requirements: form.elements.requirements.value.trim(),
+        photo,
+      }),
+    });
+    if (!response.ok) throw new Error("register failed");
+    data = await response.json();
+  } catch (error) {
+    showToast("客户注册失败，请检查手机号或邮箱是否重复");
+    return;
+  }
 
-  state.users.push(newUser);
-  setCurrentUserId(newId);
-  
+  state = ensureStateDefaults(data.state || state);
+  setAuthSession("client", data.user.id, data.token);
   form.reset();
-  saveState();
   const is8096 = isMiniView();
   navigate(is8096 ? "/discover" : "/mini/discover");
   renderAll();
@@ -1833,19 +1891,31 @@ async function miniRegisterUser(event) {
   logEvent("user", `新客户在小程序端注册成功：${name} (${gender}·${newUser.age}岁·${newUser.city})`);
   showPushNotification("【客户注册成功通知】", {
     "注册客户": name,
-    "性别年龄": `${gender} · ${newUser.age}岁`,
-    "微信账号": newUser.wechat,
-    "职业城市": `${newUser.job} · ${newUser.city}`
+    "性别年龄": `${gender} · ${data.user.age}岁`,
+    "微信账号": data.user.wechat,
+    "职业城市": `${data.user.job} · ${data.user.city}`
   });
 }
 
 // Mini Program Switch Existing User
-function miniSwitchUser() {
+async function miniSwitchUser() {
   const selectedId = $("#miniSwitchUserSelect").value;
   const user = state.users.find((u) => u.id === selectedId);
   if (!user) return;
 
-  setCurrentUserId(selectedId);
+  try {
+    const response = await fetch(`${API_BASE}/auth/client/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: selectedId }),
+    });
+    if (!response.ok) throw new Error("login failed");
+    const data = await response.json();
+    setAuthSession("client", selectedId, data.token);
+  } catch (error) {
+    showToast("客户登录失败，请稍后重试");
+    return;
+  }
   const is8096 = isMiniView();
   navigate(is8096 ? "/discover" : "/mini/discover");
   renderAll();
