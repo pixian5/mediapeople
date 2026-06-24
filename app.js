@@ -2115,11 +2115,12 @@ function renderMatchmakerChats(matchmakerId) {
   const activeThread = getThreadById(activeMatchmakerChatThreadId);
   if (!activeThread) {
     panel.style.display = "none";
+    panel.classList.remove("show");
     return;
   }
 
-  panel.style.display = "block";
-  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  panel.style.display = "flex";
+  panel.classList.add("show");
   title.textContent = getThreadDisplayName(activeThread, "matchmaker", matchmakerId);
   meta.textContent = getThreadSubtitle(activeThread);
   const messages = getThreadMessages(activeThread.id);
@@ -3279,6 +3280,18 @@ function bindEvents() {
 
   safeBind("#miniChatForm", "submit", sendMiniChatMessage);
   safeBind("#matchmakerChatForm", "submit", sendMatchmakerChatMessage);
+
+  safeBind("#closeMatchmakerChatModalBtn", "click", () => {
+    activeMatchmakerChatThreadId = null;
+    renderAll();
+  });
+
+  safeBind("#matchmakerChatPanel", "click", (event) => {
+    if (event.target === event.currentTarget) {
+      activeMatchmakerChatThreadId = null;
+      renderAll();
+    }
+  });
 
   safeBind("#becomeVipBtn", "click", becomeVip);
 
