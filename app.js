@@ -3,6 +3,8 @@ const SESSION_KEY = `${STORAGE_KEY}:session`;
 const VIP_PRICE = 399;
 const API_BASE = "/api";
 let currentDiscoverIndex = 0;
+let activeMiniChatThreadId = null;
+let activeMatchmakerChatThreadId = null;
 
 const seedState = {
   currentUserId: "u1",
@@ -174,6 +176,8 @@ const seedState = {
     },
   ],
   requests: [],
+  chatThreads: [],
+  chatMessages: [],
   deals: [{ id: "d1", requestId: null, amount: 399, createdAt: "2026-06-10" }],
   promoCodes: [
     { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
@@ -199,6 +203,8 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 function ensureStateDefaults(s) {
   if (!s) return s;
+  if (!Array.isArray(s.chatThreads)) s.chatThreads = [];
+  if (!Array.isArray(s.chatMessages)) s.chatMessages = [];
   s.users.forEach((u) => {
     if (u.phone === undefined) u.phone = null;
     if (u.email === undefined) u.email = null;
@@ -235,6 +241,15 @@ function ensureStateDefaults(s) {
       s.promoCodes.push({ code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true });
     }
   }
+  s.requests = (s.requests || []).map((request) => {
+    if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
+    return request;
+  });
+  s.chatThreads = s.chatThreads.map((thread) => {
+    if (thread.status === undefined) thread.status = "active";
+    if (!Array.isArray(thread.participants)) thread.participants = [];
+    return thread;
+  });
   return s;
 }
 
@@ -607,12 +622,129 @@ function currentUser() {
   return state.users.find((user) => user.id === session.currentUserId);
 }
 
+function currentMatchmaker() {
+  return state.matchmakers.find((matchmaker) => matchmaker.id === session.selectedMatchmakerId);
+}
+
 function getMatchmaker(id) {
   return state.matchmakers.find((matchmaker) => matchmaker.id === id);
 }
 
 function getAgency(id) {
   return state.agencies.find((agency) => agency.id === id);
+}
+
+function getRequestById(id) {
+  return state.requests.find((request) => request.id === id);
+}
+
+function getThreadById(id) {
+  return state.chatThreads.find((thread) => thread.id === id);
+}
+
+function getThreadMessages(threadId) {
+  return state.chatMessages
+    .filter((message) => message.threadId === threadId)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+function threadHasParticipant(thread, role, id) {
+  return (thread.participants || []).some((participant) => participant.role === role && participant.id === id);
+}
+
+function getOtherParticipant(thread, role, id) {
+  return (thread.participants || []).find((participant) => !(participant.role === role && participant.id === id)) || null;
+}
+
+function getThreadDisplayName(thread, viewerRole, viewerId) {
+  if (thread.type === "member_matchmaker" && viewerRole === "client") {
+    const matchmakerParticipant = (thread.participants || []).find((participant) => participant.role === "matchmaker");
+    const mm = matchmakerParticipant ? getMatchmaker(matchmakerParticipant.id) : null;
+    return mm ? `红娘 ${mm.name}` : "专属红娘";
+  }
+  if (thread.type === "member_matchmaker" && viewerRole === "matchmaker") {
+    const clientNames = (thread.participants || [])
+      .filter((participant) => participant.role === "client")
+      .map((participant) => state.users.find((item) => item.id === participant.id)?.name)
+      .filter(Boolean);
+    return clientNames.length ? clientNames.join(" / ") : "会员会话";
+  }
+  const other = getOtherParticipant(thread, viewerRole, viewerId);
+  if (!other) {
+    if (thread.type === "member_member") return "会员互聊";
+    return "聊天会话";
+  }
+  if (other.role === "matchmaker") {
+    const mm = getMatchmaker(other.id);
+    return mm ? `红娘 ${mm.name}` : "专属红娘";
+  }
+  const user = state.users.find((item) => item.id === other.id);
+  return user ? user.name : "会员";
+}
+
+function getThreadSubtitle(thread) {
+  const request = getRequestById(thread.requestId);
+  if (!request) return thread.type === "member_member" ? "会员互聊" : "会员与红娘沟通";
+  const from = state.users.find((item) => item.id === request.fromUserId);
+  const to = state.users.find((item) => item.id === request.toUserId);
+  if (thread.type === "member_member") {
+    return `互聊已开启 · ${from?.name || "会员"} 与 ${to?.name || "会员"}`;
+  }
+  return `牵线单 · ${from?.name || "会员"} 与 ${to?.name || "会员"}`;
+}
+
+function getMessageSenderName(message) {
+  if (message.senderRole === "matchmaker") {
+    return getMatchmaker(message.senderId)?.name || "红娘";
+  }
+  if (message.senderRole === "client") {
+    return state.users.find((user) => user.id === message.senderId)?.name || "会员";
+  }
+  return "系统";
+}
+
+function createLocalThread(type, request) {
+  const participants =
+    type === "member_member"
+      ? [
+          { role: "client", id: request.fromUserId },
+          { role: "client", id: request.toUserId },
+        ]
+      : [
+          { role: "matchmaker", id: request.matchmakerId },
+          { role: "client", id: request.fromUserId },
+          { role: "client", id: request.toUserId },
+        ];
+  const thread = {
+    id: uid("ct"),
+    type,
+    requestId: request.id,
+    status: "active",
+    participants,
+    createdAt: new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  };
+  state.chatThreads.unshift(thread);
+  return thread;
+}
+
+function appendLocalMessage(threadId, senderRole, senderId, content) {
+  const message = {
+    id: uid("cm"),
+    threadId,
+    senderRole,
+    senderId,
+    content: content.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  state.chatMessages.push(message);
+  const thread = getThreadById(threadId);
+  if (thread) {
+    thread.lastMessageAt = message.createdAt;
+    thread.lastMessagePreview = message.content.slice(0, 80);
+  }
+  return message;
 }
 
 function renderAll() {
@@ -1184,14 +1316,19 @@ async function createRequest(targetUserId, matchmakerId) {
       return;
     }
   } else {
-    state.requests.unshift({
+    const newRequest = {
       id: uid("r"),
       fromUserId: user.id,
       toUserId: targetUserId,
       matchmakerId,
       status: "待红娘联系",
+      memberChatEnabled: false,
       createdAt: new Date().toISOString(),
-    });
+    };
+    state.requests.unshift(newRequest);
+    if (matchmakerId) {
+      createLocalThread("member_matchmaker", newRequest);
+    }
     saveState();
     renderAll();
     showToast(`已通知红娘为你和${target.name}牵线`);
@@ -1233,15 +1370,120 @@ function renderRequests() {
         const from = state.users.find((item) => item.id === request.fromUserId);
         const to = state.users.find((item) => item.id === request.toUserId);
         const matchmaker = getMatchmaker(request.matchmakerId);
+        const otherUser = request.fromUserId === user.id ? to : from;
+        const unlockedWechat = request.status === "已联系双方" ? `<div class="muted">对方微信：${otherUser?.wechat || "待同步"}</div>` : "";
+        const memberChatStatus =
+          request.memberChatEnabled
+            ? `<div class="muted">会员互聊：已开启</div>`
+            : `<div class="muted">会员互聊：等待红娘确认</div>`;
         return `
           <article class="request-card">
             <span class="status-pill">${request.status}</span>
             <strong>${from.name} 与 ${to.name}</strong>
             <div class="muted">负责红娘：${matchmaker?.name || "待分配"}</div>
+            ${unlockedWechat}
+            ${memberChatStatus}
           </article>
         `;
       })
       .join("") || `<div class="request-card muted">还没有牵线请求。</div>`;
+
+  renderMiniChatSections(user, requests);
+}
+
+function renderMiniChatSections(user, requests) {
+  const threadList = $("#memberChatThreadsList");
+  const mutualList = $("#memberMutualChatList");
+  const panel = $("#miniChatPanel");
+  const panelTitle = $("#miniChatTitle");
+  const panelMeta = $("#miniChatMeta");
+  const messagesEl = $("#miniChatMessages");
+  const emptyEl = $("#miniChatEmpty");
+  const input = $("#miniChatInput");
+  if (!threadList || !mutualList || !panel || !panelTitle || !panelMeta || !messagesEl || !emptyEl || !input) return;
+
+  const accessibleThreads = state.chatThreads.filter((thread) => threadHasParticipant(thread, "client", user.id));
+  const mmThreads = accessibleThreads.filter((thread) => thread.type === "member_matchmaker");
+  const memberThreads = accessibleThreads.filter((thread) => thread.type === "member_member");
+
+  if (!activeMiniChatThreadId || !accessibleThreads.some((thread) => thread.id === activeMiniChatThreadId)) {
+    activeMiniChatThreadId = mmThreads[0]?.id || memberThreads[0]?.id || null;
+  }
+
+  threadList.innerHTML =
+    mmThreads
+      .map((thread) => {
+        const active = thread.id === activeMiniChatThreadId ? " active" : "";
+        const preview = thread.lastMessagePreview || "向红娘留言，沟通你的想法和顾虑。";
+        return `
+          <button class="chat-thread-card${active}" type="button" data-open-thread="${thread.id}">
+            <strong>${getThreadDisplayName(thread, "client", user.id)}</strong>
+            <span>${getThreadSubtitle(thread)}</span>
+            <em>${preview}</em>
+          </button>
+        `;
+      })
+      .join("") || `<div class="request-card muted">发起牵线后，这里会出现你和红娘的聊天窗口。</div>`;
+
+  mutualList.innerHTML =
+    requests
+      .filter((request) => request.fromUserId === user.id || request.toUserId === user.id)
+      .map((request) => {
+        const thread = memberThreads.find((item) => item.requestId === request.id);
+        const otherUser =
+          request.fromUserId === user.id
+            ? state.users.find((item) => item.id === request.toUserId)
+            : state.users.find((item) => item.id === request.fromUserId);
+        if (!thread) {
+          return `
+            <div class="request-card muted">
+              <strong>${otherUser?.name || "会员"}</strong>
+              <div>${request.memberChatEnabled ? "聊天线程生成中，请稍候刷新。" : "红娘确认双方意向后，才能开启会员互聊。"}</div>
+            </div>
+          `;
+        }
+        const active = thread.id === activeMiniChatThreadId ? " active" : "";
+        const preview = thread.lastMessagePreview || "红娘已同意，你们现在可以直接聊天了。";
+        return `
+          <button class="chat-thread-card${active}" type="button" data-open-thread="${thread.id}">
+            <strong>${getThreadDisplayName(thread, "client", user.id)}</strong>
+            <span>${getThreadSubtitle(thread)}</span>
+            <em>${preview}</em>
+          </button>
+        `;
+      })
+      .join("") || `<div class="request-card muted">暂无会员互聊会话。</div>`;
+
+  const activeThread = getThreadById(activeMiniChatThreadId);
+  if (!activeThread) {
+    panel.style.display = "none";
+    return;
+  }
+
+  panel.style.display = "block";
+  panelTitle.textContent = getThreadDisplayName(activeThread, "client", user.id);
+  panelMeta.textContent = getThreadSubtitle(activeThread);
+  const messages = getThreadMessages(activeThread.id);
+  if (!messages.length) {
+    emptyEl.style.display = "block";
+    messagesEl.innerHTML = "";
+  } else {
+    emptyEl.style.display = "none";
+    messagesEl.innerHTML = messages
+      .map((message) => {
+        const mine = message.senderRole === "client" && message.senderId === user.id;
+        return `
+          <article class="chat-bubble${mine ? " mine" : ""}">
+            <strong>${mine ? "我" : getMessageSenderName(message)}</strong>
+            <p>${message.content}</p>
+            <span>${new Date(message.createdAt).toLocaleString("zh-CN")}</span>
+          </article>
+        `;
+      })
+      .join("");
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+  input.placeholder = activeThread.type === "member_member" ? "和对方打个招呼吧" : "把你的想法发给红娘";
 }
 
 async function becomeVip() {
@@ -1611,12 +1853,20 @@ function renderMatchmakerDesk() {
       .map((request) => {
         const from = state.users.find((item) => item.id === request.fromUserId);
         const to = state.users.find((item) => item.id === request.toUserId);
+        const approveBtn =
+          request.status === "已联系双方" && !request.memberChatEnabled
+            ? `<button class="ghost-button" data-approve-chat="${request.id}" type="button" style="margin-top:8px;">同意会员互聊</button>`
+            : "";
+        const approvedTag =
+          request.memberChatEnabled ? `<div class="muted">会员互聊：已开启</div>` : "";
         return `
           <article class="request-card">
             <span class="status-pill">${request.status}</span>
             <strong>${from.name} 申请认识 ${to.name}</strong>
             <div class="muted">${new Date(request.createdAt).toLocaleString("zh-CN")}</div>
             <button class="secondary-button" data-accept="${request.id}" type="button">标记已联系双方</button>
+            ${approveBtn}
+            ${approvedTag}
           </article>
         `;
       })
@@ -1636,6 +1886,70 @@ function renderMatchmakerDesk() {
         `;
       })
       .join("") || `<div class="contact-card muted">接到牵线请求后会显示双方微信。</div>`;
+
+  renderMatchmakerChats(mmId);
+}
+
+function renderMatchmakerChats(matchmakerId) {
+  const list = $("#matchmakerChatThreadList");
+  const panel = $("#matchmakerChatPanel");
+  const title = $("#matchmakerChatTitle");
+  const meta = $("#matchmakerChatMeta");
+  const messagesEl = $("#matchmakerChatMessages");
+  const emptyEl = $("#matchmakerChatEmpty");
+  const input = $("#matchmakerChatInput");
+  if (!list || !panel || !title || !meta || !messagesEl || !emptyEl || !input) return;
+
+  const threads = state.chatThreads.filter((thread) => thread.type === "member_matchmaker" && threadHasParticipant(thread, "matchmaker", matchmakerId));
+  if (!activeMatchmakerChatThreadId || !threads.some((thread) => thread.id === activeMatchmakerChatThreadId)) {
+    activeMatchmakerChatThreadId = threads[0]?.id || null;
+  }
+
+  list.innerHTML =
+    threads
+      .map((thread) => {
+        const active = thread.id === activeMatchmakerChatThreadId ? " active" : "";
+        const preview = thread.lastMessagePreview || "这里可以和会员直接沟通牵线进度。";
+        return `
+          <button class="chat-thread-card${active}" type="button" data-open-mm-thread="${thread.id}">
+            <strong>${getThreadDisplayName(thread, "matchmaker", matchmakerId)}</strong>
+            <span>${getThreadSubtitle(thread)}</span>
+            <em>${preview}</em>
+          </button>
+        `;
+      })
+      .join("") || `<div class="request-card muted">牵线单创建后，这里会自动出现会员聊天。</div>`;
+
+  const activeThread = getThreadById(activeMatchmakerChatThreadId);
+  if (!activeThread) {
+    panel.style.display = "none";
+    return;
+  }
+
+  panel.style.display = "block";
+  title.textContent = getThreadDisplayName(activeThread, "matchmaker", matchmakerId);
+  meta.textContent = getThreadSubtitle(activeThread);
+  const messages = getThreadMessages(activeThread.id);
+  if (!messages.length) {
+    emptyEl.style.display = "block";
+    messagesEl.innerHTML = "";
+  } else {
+    emptyEl.style.display = "none";
+    messagesEl.innerHTML = messages
+      .map((message) => {
+        const mine = message.senderRole === "matchmaker" && message.senderId === matchmakerId;
+        return `
+          <article class="chat-bubble${mine ? " mine" : ""}">
+            <strong>${mine ? "我" : getMessageSenderName(message)}</strong>
+            <p>${message.content}</p>
+            <span>${new Date(message.createdAt).toLocaleString("zh-CN")}</span>
+          </article>
+        `;
+      })
+      .join("");
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+  input.placeholder = "给会员发送消息";
 }
 
 async function completeRequest(requestId) {
@@ -1681,6 +1995,125 @@ async function completeRequest(requestId) {
     "微信号码": to.wechat,
     "温馨提示": "红娘已确认双方信息，请复制微信号添加好友并备注“缘定传媒人”。"
   });
+}
+
+async function approveMemberChat(requestId) {
+  const request = getRequestById(requestId);
+  if (!request) return;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/matchmaker/requests/${requestId}/approve-member-chat`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderAll();
+      showToast("已同意双方会员直接聊天");
+    } catch (err) {
+      console.warn("API approve member chat failed, fallback to local:", err);
+      showToast("操作失败：" + err.message);
+      return;
+    }
+  } else {
+    request.memberChatEnabled = true;
+    const existing = state.chatThreads.find((thread) => thread.type === "member_member" && thread.requestId === requestId);
+    if (!existing) createLocalThread("member_member", request);
+    saveState();
+    renderAll();
+    showToast("已同意双方会员直接聊天");
+  }
+
+  const from = state.users.find((item) => item.id === request.fromUserId);
+  const to = state.users.find((item) => item.id === request.toUserId);
+  logEvent("match", `红娘已同意会员互聊：${from?.name || "会员"} 与 ${to?.name || "会员"}`);
+  showPushNotification("【会员互聊已开启】", {
+    "牵线双方": `${from?.name || "会员"} / ${to?.name || "会员"}`,
+    "当前状态": "双方可在会员端直接聊天",
+    "红娘协助": "红娘仍可继续跟进进度"
+  });
+}
+
+async function sendMiniChatMessage(event) {
+  event.preventDefault();
+  const thread = getThreadById(activeMiniChatThreadId);
+  const user = currentUser();
+  const input = $("#miniChatInput");
+  if (!thread || !user || !input) return;
+  const content = input.value.trim();
+  if (!content) return;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/chat/threads/${thread.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      input.value = "";
+      renderAll();
+    } catch (err) {
+      console.warn("API send mini chat failed, fallback to local:", err);
+      showToast("操作失败：" + err.message);
+      return;
+    }
+  } else {
+    appendLocalMessage(thread.id, "client", user.id, content);
+    input.value = "";
+    saveState();
+    renderAll();
+  }
+}
+
+async function sendMatchmakerChatMessage(event) {
+  event.preventDefault();
+  const thread = getThreadById(activeMatchmakerChatThreadId);
+  const matchmaker = currentMatchmaker();
+  const input = $("#matchmakerChatInput");
+  if (!thread || !matchmaker || !input) return;
+  const content = input.value.trim();
+  if (!content) return;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/chat/threads/${thread.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      input.value = "";
+      renderAll();
+    } catch (err) {
+      console.warn("API send matchmaker chat failed, fallback to local:", err);
+      showToast("操作失败：" + err.message);
+      return;
+    }
+  } else {
+    appendLocalMessage(thread.id, "matchmaker", matchmaker.id, content);
+    input.value = "";
+    saveState();
+    renderAll();
+  }
 }
 
 function renderAdmin() {
@@ -2081,18 +2514,22 @@ async function mmAuthLogin() {
   const m = state.matchmakers.find((item) => item.id === selectedId);
   if (!m) return;
 
-  try {
-    const response = await fetch(`${API_BASE}/auth/matchmaker/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchmakerId: selectedId }),
-    });
-    if (!response.ok) throw new Error("login failed");
-    const data = await response.json();
-    setAuthSession("matchmaker", selectedId, data.token);
-  } catch (error) {
-    showToast("红娘登录失败，请稍后重试");
-    return;
+  if (apiAvailable) {
+    try {
+      const response = await fetch(`${API_BASE}/auth/matchmaker/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchmakerId: selectedId }),
+      });
+      if (!response.ok) throw new Error("login failed");
+      const data = await response.json();
+      setAuthSession("matchmaker", selectedId, data.token);
+    } catch (error) {
+      showToast("红娘登录失败，请稍后重试");
+      return;
+    }
+  } else {
+    setAuthSession("matchmaker", selectedId, null);
   }
   const is8097 = isMatchmakerView();
   navigate(is8097 ? "/workbench" : "/matchmaker/workbench");
@@ -2331,18 +2768,22 @@ async function miniSwitchUser() {
   const user = state.users.find((u) => u.id === selectedId);
   if (!user) return;
 
-  try {
-    const response = await fetch(`${API_BASE}/auth/client/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: selectedId }),
-    });
-    if (!response.ok) throw new Error("login failed");
-    const data = await response.json();
-    setAuthSession("client", selectedId, data.token);
-  } catch (error) {
-    showToast("客户登录失败，请稍后重试");
-    return;
+  if (apiAvailable) {
+    try {
+      const response = await fetch(`${API_BASE}/auth/client/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedId }),
+      });
+      if (!response.ok) throw new Error("login failed");
+      const data = await response.json();
+      setAuthSession("client", selectedId, data.token);
+    } catch (error) {
+      showToast("客户登录失败，请稍后重试");
+      return;
+    }
+  } else {
+    setAuthSession("client", selectedId, null);
   }
   const is8096 = isMiniView();
   navigate(is8096 ? "/discover" : "/mini/discover");
@@ -2565,8 +3006,34 @@ function bindEvents() {
   
   safeBind("#notificationList", "click", (event) => {
     const button = event.target.closest("[data-accept]");
-    if (button) completeRequest(button.dataset.accept);
+    if (button) {
+      completeRequest(button.dataset.accept);
+      return;
+    }
+    const approveButton = event.target.closest("[data-approve-chat]");
+    if (approveButton) {
+      approveMemberChat(approveButton.dataset.approveChat);
+    }
   });
+
+  safeBind("#requestsContent", "click", (event) => {
+    const openThreadButton = event.target.closest("[data-open-thread]");
+    if (openThreadButton) {
+      activeMiniChatThreadId = openThreadButton.dataset.openThread;
+      renderAll();
+    }
+  });
+
+  safeBind("#matchmakerChatThreadList", "click", (event) => {
+    const openThreadButton = event.target.closest("[data-open-mm-thread]");
+    if (openThreadButton) {
+      activeMatchmakerChatThreadId = openThreadButton.dataset.openMmThread;
+      renderAll();
+    }
+  });
+
+  safeBind("#miniChatForm", "submit", sendMiniChatMessage);
+  safeBind("#matchmakerChatForm", "submit", sendMatchmakerChatMessage);
 
   safeBind("#becomeVipBtn", "click", becomeVip);
 

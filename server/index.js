@@ -177,6 +177,8 @@ const seedState = {
     },
   ],
   requests: [],
+  chatThreads: [],
+  chatMessages: [],
   deals: [{ id: "d1", requestId: null, amount: 399, createdAt: "2026-06-10" }],
   promoCodes: [
     { code: "VIP666", matchmakerId: "m1", used: false, usedBy: null },
@@ -284,6 +286,29 @@ async function initDatabase() {
     )
   `);
   await pool.query(`
+    create table if not exists chat_threads (
+      id text primary key,
+      type text not null,
+      request_id text references match_requests(id) on delete cascade,
+      status text not null default 'active',
+      participants jsonb not null,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create table if not exists chat_messages (
+      id text primary key,
+      thread_id text references chat_threads(id) on delete cascade,
+      sender_role text not null,
+      sender_id text not null,
+      content text not null,
+      created_at timestamptz,
+      raw jsonb not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
     create table if not exists promo_codes (
       code text primary key,
       matchmaker_id text references matchmakers(id) on delete set null,
@@ -310,7 +335,7 @@ async function initDatabase() {
 }
 
 function validateState(data) {
-  const requiredArrays = ["agencies", "matchmakers", "users", "requests", "deals", "promoCodes"];
+  const requiredArrays = ["agencies", "matchmakers", "users", "requests", "chatThreads", "chatMessages", "deals", "promoCodes"];
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return "state must be an object";
   }
@@ -397,6 +422,65 @@ function publicState(data) {
   };
 }
 
+function ensureRequestDefaults(request) {
+  if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
+  return request;
+}
+
+function ensureThreadDefaults(thread) {
+  if (thread.status === undefined) thread.status = "active";
+  if (!Array.isArray(thread.participants)) thread.participants = [];
+  return thread;
+}
+
+function threadHasParticipant(thread, role, id) {
+  return (thread.participants || []).some((participant) => participant.role === role && participant.id === id);
+}
+
+function canAccessThread(thread, auth) {
+  if (!thread || !auth) return false;
+  if (auth.role === "admin") return true;
+  return threadHasParticipant(thread, auth.role, auth.sub);
+}
+
+function getThreadOtherParticipant(thread, role, id) {
+  return (thread.participants || []).find((participant) => !(participant.role === role && participant.id === id)) || null;
+}
+
+function buildMemberMatchmakerThread(request) {
+  if (!request.matchmakerId) return null;
+  return ensureThreadDefaults({
+    id: `ct${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+    type: "member_matchmaker",
+    requestId: request.id,
+    status: "active",
+    participants: [
+      { role: "matchmaker", id: request.matchmakerId },
+      { role: "client", id: request.fromUserId },
+      { role: "client", id: request.toUserId },
+    ],
+    createdAt: new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  });
+}
+
+function buildMemberMemberThread(request) {
+  return ensureThreadDefaults({
+    id: `ct${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+    type: "member_member",
+    requestId: request.id,
+    status: "active",
+    participants: [
+      { role: "client", id: request.fromUserId },
+      { role: "client", id: request.toUserId },
+    ],
+    createdAt: new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  });
+}
+
 function normalizePhone(value) {
   return String(value || "").trim();
 }
@@ -411,6 +495,8 @@ async function readState() {
   const matchmakersRes = await pool.query("select raw from matchmakers order by id");
   const usersRes = await pool.query("select raw from users order by id");
   const requestsRes = await pool.query("select raw from match_requests order by raw->>'createdAt' desc, id");
+  const chatThreadsRes = await pool.query("select raw from chat_threads order by coalesce(raw->>'lastMessageAt', raw->>'createdAt') desc, id");
+  const chatMessagesRes = await pool.query("select raw from chat_messages order by created_at asc, id");
   const dealsRes = await pool.query("select raw from deals order by raw->>'createdAt' desc, id");
   const promoCodesRes = await pool.query("select raw from promo_codes order by code");
   const settingsRes = await pool.query("select data from app_settings where id = 'runtime'");
@@ -436,7 +522,9 @@ async function readState() {
       }
       return u;
     }),
-    requests: requestsRes.rows.map(r => r.raw),
+    requests: requestsRes.rows.map(r => ensureRequestDefaults(r.raw)),
+    chatThreads: chatThreadsRes.rows.map(r => ensureThreadDefaults(r.raw)),
+    chatMessages: chatMessagesRes.rows.map(r => r.raw),
     deals: dealsRes.rows.map(r => r.raw),
     promoCodes: promoCodesRes.rows.map(r => r.raw),
   };
@@ -589,6 +677,57 @@ async function syncNormalizedState(data, existingClient = null) {
     }
 
     // 5. UPSERT deals
+    for (const thread of data.chatThreads || []) {
+      await client.query(
+        `
+          insert into chat_threads (id, type, request_id, status, participants, raw)
+          values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+          on conflict (id) do update set
+            type = excluded.type,
+            request_id = excluded.request_id,
+            status = excluded.status,
+            participants = excluded.participants,
+            raw = excluded.raw,
+            updated_at = now()
+        `,
+        [
+          thread.id,
+          thread.type,
+          thread.requestId || null,
+          thread.status || "active",
+          JSON.stringify(thread.participants || []),
+          JSON.stringify(thread),
+        ],
+      );
+    }
+
+    for (const message of data.chatMessages || []) {
+      await client.query(
+        `
+          insert into chat_messages (id, thread_id, sender_role, sender_id, content, created_at, raw)
+          values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+          on conflict (id) do update set
+            thread_id = excluded.thread_id,
+            sender_role = excluded.sender_role,
+            sender_id = excluded.sender_id,
+            content = excluded.content,
+            created_at = excluded.created_at,
+            raw = excluded.raw,
+            updated_at = now()
+        `,
+        [
+          message.id,
+          message.threadId,
+          message.senderRole,
+          message.senderId,
+          message.content,
+          asDate(message.createdAt),
+          JSON.stringify(message),
+        ],
+      );
+    }
+
+    // 5. UPSERT deals
     for (const deal of data.deals || []) {
       await client.query(
         `
@@ -656,6 +795,12 @@ async function syncNormalizedState(data, existingClient = null) {
     );
 
     // 8. DELETE missing rows (in reverse dependency order to prevent FK violations)
+    const chatMessageIds = (data.chatMessages || []).map((m) => m.id);
+    await client.query("delete from chat_messages where id not in (select unnest($1::text[]))", [chatMessageIds]);
+
+    const chatThreadIds = (data.chatThreads || []).map((t) => t.id);
+    await client.query("delete from chat_threads where id not in (select unnest($1::text[]))", [chatThreadIds]);
+
     const dealIds = (data.deals || []).map(d => d.id);
     await client.query("delete from deals where id not in (select unnest($1::text[]))", [dealIds]);
 
@@ -1060,6 +1205,7 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
     toUserId: targetUserId,
     matchmakerId,
     status: "待红娘联系",
+    memberChatEnabled: false,
     createdAt: new Date().toISOString()
   };
 
@@ -1068,6 +1214,15 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
      values ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
     [reqId, userId, targetUserId, matchmakerId, matchReq.status, matchReq.createdAt, JSON.stringify(matchReq)]
   );
+
+  const mmThread = buildMemberMatchmakerThread(matchReq);
+  if (mmThread) {
+    await pool.query(
+      `insert into chat_threads (id, type, request_id, status, participants, raw)
+       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+      [mmThread.id, mmThread.type, mmThread.requestId, mmThread.status, JSON.stringify(mmThread.participants), JSON.stringify(mmThread)]
+    );
+  }
 
   response.status(201).json({ request: matchReq, state: publicState(await readState()) });
 });
@@ -1089,6 +1244,79 @@ app.patch("/api/matchmaker/requests/:id/contacted", requireAuth(["matchmaker"]),
     [JSON.stringify(req), requestId]
   );
   response.json({ request: req, state: publicState(await readState()) });
+});
+
+app.patch("/api/matchmaker/requests/:id/approve-member-chat", requireAuth(["matchmaker"]), async (request, response) => {
+  const requestId = request.params.id;
+  const matchmakerId = request.user.sub;
+
+  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
+  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
+  const req = ensureRequestDefaults(reqRes.rows[0].raw);
+  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
+  if (req.status !== "已联系双方") return response.status(400).json({ error: "contact_first_required" });
+
+  req.memberChatEnabled = true;
+  await pool.query(
+    "update match_requests set raw = $1, updated_at = now() where id = $2",
+    [JSON.stringify(req), requestId]
+  );
+
+  const threadRes = await pool.query(
+    "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
+    [requestId]
+  );
+  if (threadRes.rows.length === 0) {
+    const memberThread = buildMemberMemberThread(req);
+    await pool.query(
+      `insert into chat_threads (id, type, request_id, status, participants, raw)
+       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+      [
+        memberThread.id,
+        memberThread.type,
+        memberThread.requestId,
+        memberThread.status,
+        JSON.stringify(memberThread.participants),
+        JSON.stringify(memberThread),
+      ]
+    );
+  }
+
+  response.json({ request: req, state: publicState(await readState()) });
+});
+
+app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker", "admin"]), async (request, response) => {
+  const threadId = request.params.id;
+  const content = String(request.body?.content || "").trim();
+  if (!content) return response.status(400).json({ error: "content_required" });
+
+  const threadRes = await pool.query("select raw from chat_threads where id = $1", [threadId]);
+  if (threadRes.rows.length === 0) return response.status(404).json({ error: "thread_not_found" });
+  const thread = ensureThreadDefaults(threadRes.rows[0].raw);
+  if (!canAccessThread(thread, request.user)) return response.status(403).json({ error: "forbidden" });
+  if (thread.status !== "active") return response.status(400).json({ error: "thread_inactive" });
+
+  const message = {
+    id: `cm${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+    threadId,
+    senderRole: request.user.role,
+    senderId: request.user.sub,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+  thread.lastMessageAt = message.createdAt;
+  thread.lastMessagePreview = content.slice(0, 80);
+
+  await pool.query(
+    "insert into chat_messages (id, thread_id, sender_role, sender_id, content, created_at, raw) values ($1, $2, $3, $4, $5, $6, $7::jsonb)",
+    [message.id, message.threadId, message.senderRole, message.senderId, message.content, message.createdAt, JSON.stringify(message)]
+  );
+  await pool.query(
+    "update chat_threads set raw = $1, updated_at = now() where id = $2",
+    [JSON.stringify(thread), threadId]
+  );
+
+  response.status(201).json({ message, state: publicState(await readState()) });
 });
 
 // 6. 管理员：添加机构
