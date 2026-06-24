@@ -558,6 +558,97 @@ async function readState() {
     splits: { promo: 20, matchmaker: 35, platform: 45 }
   };
 
+  const allThreads = chatThreadsRes.rows.map(r => ensureThreadDefaults(r.raw));
+  const allUsers = usersRes.rows.map(r => r.raw);
+  
+  for (const request of requestsRes.rows.map(r => ensureRequestDefaults(r.raw))) {
+    if (request.matchmakerId) {
+      const fromUser = allUsers.find(u => u.id === request.fromUserId);
+      const toUser = allUsers.find(u => u.id === request.toUserId);
+      if (fromUser && toUser) {
+        const users = [fromUser, toUser];
+        const maleUser = users.find((item) => item.gender === "男") || fromUser;
+        const femaleUser = users.find((item) => item.gender === "女") || toUser;
+        
+        // Check male 2-way
+        let maleThread = allThreads.find(t => t.requestId === request.id && t.participants.length === 2 && t.participants.some(p => p.id === maleUser.id));
+        if (!maleThread) {
+          maleThread = {
+            id: `ct_gen_${request.id}_male`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: maleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          await pool.query(
+            `insert into chat_threads (id, type, request_id, status, participants, raw)
+             values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+             on conflict (id) do nothing`,
+            [maleThread.id, maleThread.type, maleThread.requestId, maleThread.status, JSON.stringify(maleThread.participants), JSON.stringify(maleThread)]
+          );
+          allThreads.push(maleThread);
+        }
+        
+        // Check female 2-way
+        let femaleThread = allThreads.find(t => t.requestId === request.id && t.participants.length === 2 && t.participants.some(p => p.id === femaleUser.id));
+        if (!femaleThread) {
+          femaleThread = {
+            id: `ct_gen_${request.id}_female`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: femaleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          await pool.query(
+            `insert into chat_threads (id, type, request_id, status, participants, raw)
+             values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+             on conflict (id) do nothing`,
+            [femaleThread.id, femaleThread.type, femaleThread.requestId, femaleThread.status, JSON.stringify(femaleThread.participants), JSON.stringify(femaleThread)]
+          );
+          allThreads.push(femaleThread);
+        }
+        
+        // Check 3-way
+        let bothThread = allThreads.find(t => t.requestId === request.id && t.participants.length === 3);
+        if (!bothThread) {
+          bothThread = {
+            id: `ct_gen_${request.id}_both`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: maleUser.id },
+              { role: "client", id: femaleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          await pool.query(
+            `insert into chat_threads (id, type, request_id, status, participants, raw)
+             values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+             on conflict (id) do nothing`,
+            [bothThread.id, bothThread.type, bothThread.requestId, bothThread.status, JSON.stringify(bothThread.participants), JSON.stringify(bothThread)]
+          );
+          allThreads.push(bothThread);
+        }
+      }
+    }
+  }
+
   return {
     currentUserId: runtimeSettings.currentUserId,
     selectedMatchmakerId: runtimeSettings.selectedMatchmakerId,
@@ -573,7 +664,7 @@ async function readState() {
       return u;
     }),
     requests: requestsRes.rows.map(r => ensureRequestDefaults(r.raw)),
-    chatThreads: chatThreadsRes.rows.map(r => ensureThreadDefaults(r.raw)),
+    chatThreads: allThreads,
     chatMessages: chatMessagesRes.rows.map(r => r.raw),
     deals: dealsRes.rows.map(r => r.raw),
     promoCodes: promoCodesRes.rows.map(r => r.raw),

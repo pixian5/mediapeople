@@ -253,6 +253,77 @@ function ensureStateDefaults(s) {
     if (!Array.isArray(thread.participants)) thread.participants = [];
     return thread;
   });
+
+  // Ensure all 3 matchmaker threads exist for each request
+  (s.requests || []).forEach((request) => {
+    if (request.matchmakerId) {
+      const fromUser = s.users.find((u) => u.id === request.fromUserId);
+      const toUser = s.users.find((u) => u.id === request.toUserId);
+      if (fromUser && toUser) {
+        const users = [fromUser, toUser];
+        const maleUser = users.find((item) => item.gender === "男") || fromUser;
+        const femaleUser = users.find((item) => item.gender === "女") || toUser;
+        
+        // Check male 2-way
+        let maleThread = s.chatThreads.find((t) => t.requestId === request.id && (t.participants || []).length === 2 && t.participants.some(p => p.id === maleUser.id));
+        if (!maleThread) {
+          maleThread = {
+            id: `ct_gen_${request.id}_male`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: maleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          s.chatThreads.push(maleThread);
+        }
+        
+        // Check female 2-way
+        let femaleThread = s.chatThreads.find((t) => t.requestId === request.id && (t.participants || []).length === 2 && t.participants.some(p => p.id === femaleUser.id));
+        if (!femaleThread) {
+          femaleThread = {
+            id: `ct_gen_${request.id}_female`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: femaleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          s.chatThreads.push(femaleThread);
+        }
+        
+        // Check 3-way
+        let bothThread = s.chatThreads.find((t) => t.requestId === request.id && (t.participants || []).length === 3);
+        if (!bothThread) {
+          bothThread = {
+            id: `ct_gen_${request.id}_both`,
+            type: "member_matchmaker",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: maleUser.id },
+              { role: "client", id: femaleUser.id }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          };
+          s.chatThreads.push(bothThread);
+        }
+      }
+    }
+  });
   return s;
 }
 
