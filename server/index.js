@@ -461,22 +461,58 @@ function getThreadOtherParticipant(thread, role, id) {
   return (thread.participants || []).find((participant) => !(participant.role === role && participant.id === id)) || null;
 }
 
-function buildMemberMatchmakerThread(request) {
-  if (!request.matchmakerId) return null;
-  return ensureThreadDefaults({
-    id: `ct${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+function buildMemberMatchmakerThreads(request, fromUser, toUser) {
+  if (!request.matchmakerId) return [];
+  const users = [fromUser, toUser];
+  const maleUser = users.find((item) => item.gender === "男") || fromUser;
+  const femaleUser = users.find((item) => item.gender === "女") || toUser;
+
+  const baseId = `ct${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
+  
+  const maleThread = ensureThreadDefaults({
+    id: `${baseId}_male`,
     type: "member_matchmaker",
     requestId: request.id,
     status: "active",
     participants: [
       { role: "matchmaker", id: request.matchmakerId },
-      { role: "client", id: request.fromUserId },
-      { role: "client", id: request.toUserId },
+      { role: "client", id: maleUser.id }
     ],
     createdAt: new Date().toISOString(),
     lastMessageAt: null,
     lastMessagePreview: "",
   });
+
+  const femaleThread = ensureThreadDefaults({
+    id: `${baseId}_female`,
+    type: "member_matchmaker",
+    requestId: request.id,
+    status: "active",
+    participants: [
+      { role: "matchmaker", id: request.matchmakerId },
+      { role: "client", id: femaleUser.id }
+    ],
+    createdAt: new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  });
+
+  const bothThread = ensureThreadDefaults({
+    id: `${baseId}_both`,
+    type: "member_matchmaker",
+    requestId: request.id,
+    status: "active",
+    participants: [
+      { role: "matchmaker", id: request.matchmakerId },
+      { role: "client", id: maleUser.id },
+      { role: "client", id: femaleUser.id }
+    ],
+    createdAt: new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  });
+
+  return [maleThread, femaleThread, bothThread];
 }
 
 function buildMemberMemberThread(request) {
@@ -1231,12 +1267,12 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
     [reqId, userId, targetUserId, matchmakerId, matchReq.status, matchReq.createdAt, JSON.stringify(matchReq)]
   );
 
-  const mmThread = buildMemberMatchmakerThread(matchReq);
-  if (mmThread) {
+  const mmThreads = buildMemberMatchmakerThreads(matchReq, fromUser, toUser);
+  for (const thread of mmThreads) {
     await pool.query(
       `insert into chat_threads (id, type, request_id, status, participants, raw)
        values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-      [mmThread.id, mmThread.type, mmThread.requestId, mmThread.status, JSON.stringify(mmThread.participants), JSON.stringify(mmThread)]
+      [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)]
     );
   }
 
