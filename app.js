@@ -996,19 +996,65 @@ function renderProfiles() {
 
   const profile = profiles[currentDiscoverIndex];
   
+  const requirement = user.vip
+    ? profile.requirements
+    : "开通会员后可查看对方的择偶要求";
+  const lockedClass = user.vip ? "" : " locked";
+
+  const delegatedMms = (profile.delegatedMatchmakerIds || [])
+    .map(id => getMatchmaker(id))
+    .filter(Boolean);
+
+  let matchmakerDropdownHtml = "";
+  if (delegatedMms.length > 0) {
+    matchmakerDropdownHtml = `
+      <label class="wide" style="display: block; margin-bottom: 12px; text-align: left;">
+        <span style="font-weight: bold; margin-bottom: 6px; display: block; color: var(--coral);">选择联系的红娘：</span>
+        <select id="connectMatchmakerSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; outline: none; background: #fff; font-size: 13px;">
+          ${delegatedMms.map(mm => `<option value="${mm.id}">${mm.name} (${mm.code})</option>`).join("")}
+        </select>
+      </label>
+    `;
+  } else {
+    const fallbackMm = state.matchmakers[0];
+    matchmakerDropdownHtml = `
+      <label class="wide" style="display: block; margin-bottom: 12px; text-align: left;">
+        <span style="font-weight: bold; margin-bottom: 6px; display: block; color: var(--coral);">选择联系的红娘：</span>
+        <select id="connectMatchmakerSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; outline: none; background: #fff; font-size: 13px;">
+          <option value="${fallbackMm.id}">${fallbackMm.name} (${fallbackMm.code})</option>
+        </select>
+      </label>
+    `;
+  }
+
   $("#profileList").innerHTML = `
-    <article class="profile-card" style="cursor: pointer;" data-view-detail="${profile.id}">
-      <div class="profile-photo" style="background-image:url('${profile.photo}')"></div>
-      <div class="profile-body">
-        <div class="profile-head">
-          <strong>${profile.name}</strong>
-          <span class="profile-meta">${profile.age} 岁 · ${profile.city}</span>
+    <article class="profile-card" style="border: 1px solid var(--line); border-radius: 8px; background: white; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="background-image: url('${profile.photo}'); height: 220px; background-size: cover; background-position: center; position: relative;">
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); padding: 15px; color: #fff;">
+          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left; color: #fff;">${profile.name}</h3>
+          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left; color: #fff; opacity: 0.9;">${profile.gender} · ${profile.age} 岁 · ${profile.city}</p>
         </div>
-        <div class="profile-meta">${profile.gender} · ${profile.job}</div>
-        <p>${profile.bio.substring(0, 45)}...</p>
-        <div style="display: flex; gap: 10px; margin-top: 15px;">
-          <button class="primary-button" style="flex: 1;" data-view-detail="${profile.id}" type="button">查看详细资料</button>
-          <button class="secondary-button" id="nextDiscoverBtn" style="flex: 1; background: #f3f4f6; color: #374151;" type="button">换一位 ➔</button>
+      </div>
+      <div class="profile-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; text-align: left;">
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">职业身份</span>
+          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profile.job}</p>
+        </div>
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">自我介绍</span>
+          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profile.bio}</p>
+        </div>
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">择偶要求</span>
+          <div class="requirement-box${lockedClass}" style="margin-top: 4px; padding: 10px; font-size: 14px;">${requirement}</div>
+        </div>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+        <div>
+          ${matchmakerDropdownHtml}
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 5px;">
+          <button class="primary-button" id="cardApplyMatchRequestBtn" data-profile-id="${profile.id}" style="flex: 1.2;" type="button">申请牵线</button>
+          <button class="secondary-button" id="nextDiscoverBtn" style="flex: 0.8; background: #f3f4f6; color: #374151;" type="button">换一位 ➔</button>
         </div>
       </div>
     </article>
@@ -2478,9 +2524,16 @@ function bindEvents() {
       renderProfiles();
       return;
     }
-    const card = event.target.closest("[data-view-detail]");
-    if (card) {
-      showProfileDetail(card.dataset.viewDetail);
+    const applyBtn = event.target.closest("#cardApplyMatchRequestBtn");
+    if (applyBtn) {
+      const select = $("#connectMatchmakerSelect");
+      const matchmakerId = select ? select.value : null;
+      if (!matchmakerId) {
+        showToast("请选择联系的红娘");
+        return;
+      }
+      createRequest(applyBtn.dataset.profileId, matchmakerId);
+      return;
     }
   });
 
