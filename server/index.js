@@ -424,7 +424,21 @@ function publicState(data) {
 
 function ensureRequestDefaults(request) {
   if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
+  if (request.maleContacted === undefined) {
+    request.maleContacted = request.status === "已联系双方";
+  }
+  if (request.femaleContacted === undefined) {
+    request.femaleContacted = request.status === "已联系双方";
+  }
+  request.status = getRequestContactStatus(request);
   return request;
+}
+
+function getRequestContactStatus(request) {
+  if (request.maleContacted && request.femaleContacted) return "已联系双方";
+  if (request.maleContacted) return "已联系男方";
+  if (request.femaleContacted) return "已联系女方";
+  return "待红娘联系";
 }
 
 function ensureThreadDefaults(thread) {
@@ -1205,6 +1219,8 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
     toUserId: targetUserId,
     matchmakerId,
     status: "待红娘联系",
+    maleContacted: false,
+    femaleContacted: false,
     memberChatEnabled: false,
     createdAt: new Date().toISOString()
   };
@@ -1227,21 +1243,27 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
   response.status(201).json({ request: matchReq, state: publicState(await readState()) });
 });
 
-// 5. 红娘：标记已联系双方
+// 5. 红娘：分别标记已联系男方/女方
 app.patch("/api/matchmaker/requests/:id/contacted", requireAuth(["matchmaker"]), async (request, response) => {
   const requestId = request.params.id;
   const matchmakerId = request.user.sub;
+  const side = request.body?.side;
+  if (!["male", "female"].includes(side)) {
+    return response.status(400).json({ error: "contact_side_required" });
+  }
 
   const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
   if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
-  const req = reqRes.rows[0].raw;
+  const req = ensureRequestDefaults(reqRes.rows[0].raw);
 
   if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
 
-  req.status = "已联系双方";
+  if (side === "male") req.maleContacted = true;
+  if (side === "female") req.femaleContacted = true;
+  req.status = getRequestContactStatus(req);
   await pool.query(
-    "update match_requests set status = '已联系双方', raw = $1, updated_at = now() where id = $2",
-    [JSON.stringify(req), requestId]
+    "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
+    [req.status, JSON.stringify(req), requestId]
   );
   response.json({ request: req, state: publicState(await readState()) });
 });
