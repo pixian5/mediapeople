@@ -2611,7 +2611,7 @@ function bindEvents() {
     });
 
     document.addEventListener("click", (e) => {
-      if (!e.target.closest(".searchable-select")) {
+      if (dropdownPanel.style.display === "block" && !e.target.closest(".searchable-select")) {
         dropdownPanel.style.display = "none";
         const selectedCode = referralInput ? referralInput.value : "";
         if (selectedCode) {
