@@ -38,11 +38,9 @@ if docker ps --format '{{.Names}}' | grep -q 'mediapeople-web-ssl'; then
   fi
 fi
 
-log "正在重载 Nginx 配置以确保禁用 HTML 缓存..."
-for container in mediapeople-web mediapeople-web-mini mediapeople-web-matchmaker mediapeople-web-admin mediapeople-web-ssl mediapeople-web-mini-ssl mediapeople-web-matchmaker-ssl mediapeople-web-admin-ssl; do
-  if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-    docker exec $container nginx -s reload 2>&1 | tee -a "$LOG_FILE" || true
-  fi
+log "正在重启 Nginx 容器以挂载最新文件并应用配置..."
+for container in web web-mini web-matchmaker web-admin web-ssl web-mini-ssl web-matchmaker-ssl web-admin-ssl; do
+  docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" restart $container 2>&1 | tee -a "$LOG_FILE" || true
 done
 
 log "===== 部署完成 ====="
