@@ -3,7 +3,33 @@
 # 退出脚本如果任何命令失败
 set -e
 
-echo "=== 1. 运行本地语法与配置检查 ==="
+echo "=== 1. 自动更新前端资源版本号 (Cache Busting) ==="
+node -e '
+const fs = require("fs");
+const files = ["admin.html", "index.html", "matchmaker.html", "mini.html", "readme.md"];
+const content = fs.readFileSync("admin.html", "utf8");
+const match = content.match(/app\.js\?v=(\d+\.\d+\.\d+)/);
+if (match) {
+  const currentVersion = match[1];
+  const parts = currentVersion.split(".");
+  parts[parts.length - 1] = parseInt(parts[parts.length - 1], 10) + 1;
+  const newVersion = parts.join(".");
+  console.log("正在将版本号从 " + currentVersion + " 升级至 " + newVersion);
+  for (const file of files) {
+    if (fs.existsSync(file)) {
+      let fileContent = fs.readFileSync(file, "utf8");
+      fileContent = fileContent.replace(/(app\.js\?v=)\d+\.\d+\.\d+/g, "$1" + newVersion);
+      fileContent = fileContent.replace(/(styles\.css\?v=)\d+\.\d+\.\d+/g, "$1" + newVersion);
+      fs.writeFileSync(file, fileContent, "utf8");
+    }
+  }
+} else {
+  console.log("未找到版本号，跳过更新。");
+}
+'
+echo ""
+
+echo "=== 2. 运行本地语法与配置检查 ==="
 node --check app.js
 node --check server/index.js
 POSTGRES_PASSWORD=dummy JWT_SECRET=dummy docker compose -f compose.yml -f compose.ssl.yml config > /dev/null
@@ -12,7 +38,7 @@ echo ""
 
 # 检查是否有未提交的修改
 if [ -n "$(git status --porcelain)" ]; then
-    echo "=== 2. 发现未提交的更改，准备进行 Git 提交 ==="
+    echo "=== 3. 发现未提交的更改，准备进行 Git 提交 ==="
     git status --short
     echo ""
     
@@ -31,21 +57,21 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "✓ 代码已本地提交: $COMMIT_MSG"
     echo ""
 else
-    echo "=== 2. 没有检测到未提交的更改，跳过 Commit ==="
+    echo "=== 3. 没有检测到未提交的更改，跳过 Commit ==="
     echo ""
 fi
 
-echo "=== 3. 推送代码至 GitHub ==="
+echo "=== 4. 推送代码至 GitHub ==="
 git push origin master
 echo "✓ 代码推送成功！"
 echo ""
 
-echo "=== 4. 连接服务器并执行部署 ==="
+echo "=== 5. 连接服务器并执行部署 ==="
 ssh -i ~/.ssh/mediapeople_uk_ed25519 -o StrictHostKeyChecking=accept-new root@uk.sbbz.tech "bash /opt/mediapeople/deploy/auto-deploy.sh"
 echo "✓ 服务器部署指令执行完成！"
 echo ""
 
-echo "=== 5. 运行健康检查 ==="
+echo "=== 6. 运行健康检查 ==="
 echo "等待 3 秒让服务启动..."
 sleep 3
 
