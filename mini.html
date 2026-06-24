@@ -116,6 +116,10 @@
                         <span>对另一半的要求</span>
                         <textarea name="requirements" rows="3" required></textarea>
                       </label>
+                      <div class="wide" style="margin-top: 10px; margin-bottom: 5px;">
+                        <span>选择要委托的红娘 (可多选)</span>
+                        <div id="profileMatchmakersContainer" style="display: flex; gap: 15px; margin-top: 5px;"></div>
+                      </div>
                       <button class="primary-button wide" type="submit">保存资料</button>
                     </form>
                   </div>
@@ -211,6 +215,10 @@
                         <span>择偶要求</span>
                         <textarea name="requirements" rows="2" required placeholder="对另一半的要求"></textarea>
                       </label>
+                      <div class="wide" style="margin-top: 10px; margin-bottom: 5px;">
+                        <span>选择要委托的红娘 (可多选)</span>
+                        <div id="registerMatchmakersContainer" style="display: flex; gap: 15px; margin-top: 5px;"></div>
+                      </div>
                       <button class="primary-button wide" type="submit">立即注册并登录</button>
                     </form>
                   </div>
@@ -427,7 +435,20 @@
     </div>
   </div>
 
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <!-- 嘉宾详细资料模态弹窗 (Guest Details Modal) -->
+  <div class="modal-backdrop" id="profileDetailModal" style="display: none;">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2>💖 嘉宾详细资料</h2>
+        <button class="modal-close" id="closeProfileDetailModalBtn" type="button">&times;</button>
+      </div>
+      <div id="profileDetailModalBody" style="padding: 10px 0 0 0; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Container filled dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/app.js?v=1.0.13"></script>
   </body>
 </html>

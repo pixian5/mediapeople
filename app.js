@@ -2,6 +2,7 @@ const STORAGE_KEY = "mediapeople-dating-demo-v1";
 const SESSION_KEY = `${STORAGE_KEY}:session`;
 const VIP_PRICE = 399;
 const API_BASE = "/api";
+let currentDiscoverIndex = 0;
 
 const seedState = {
   currentUserId: "u1",
@@ -182,6 +183,12 @@ const seedState = {
   ],
 };
 
+seedState.users.forEach((u) => {
+  if (!u.delegatedMatchmakerIds) {
+    u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
+  }
+});
+
 let state = structuredClone(seedState);
 let session = loadSession();
 let apiAvailable = false;
@@ -200,6 +207,9 @@ function ensureStateDefaults(s) {
     if (u.idCard === undefined) u.idCard = null;
     if (u.vip && !u.vipExpiresAt) {
       u.vipExpiresAt = "2027-06-11";
+    }
+    if (!u.delegatedMatchmakerIds) {
+      u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
     }
   });
   // Ensure u1 has phone and email, u2 has only email (no phone) to test phone supplement
@@ -867,6 +877,19 @@ function renderProfileForm() {
         form.elements[key].value = value;
       }
     });
+
+    const container = $("#profileMatchmakersContainer");
+    if (container) {
+      container.innerHTML = state.matchmakers.map(mm => {
+        const checked = (user.delegatedMatchmakerIds && user.delegatedMatchmakerIds.includes(mm.id)) ? "checked" : "";
+        return `
+          <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+            <input type="checkbox" name="delegatedMatchmakers" value="${mm.id}" ${checked} />
+            <span>${mm.name}</span>
+          </label>
+        `;
+      }).join("");
+    }
   }
 }
 
@@ -884,6 +907,18 @@ function renderMineTabContent() {
           `<option value="${u.id}">${u.name} (${u.gender} · ${u.age}岁 · ${u.city})</option>`,
       )
       .join("");
+
+    const registerContainer = $("#registerMatchmakersContainer");
+    if (registerContainer) {
+      registerContainer.innerHTML = state.matchmakers.map(mm => {
+        return `
+          <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+            <input type="checkbox" name="delegatedMatchmakers" value="${mm.id}" checked />
+            <span>${mm.name}</span>
+          </label>
+        `;
+      }).join("");
+    }
   } else {
     $("#miniMineUnregistered").style.display = "none";
     $("#miniMineRegistered").style.display = "block";
@@ -950,39 +985,123 @@ function renderProfiles() {
       matchesAge(item.age, ageRange),
   );
 
-  $("#profileList").innerHTML =
-    profiles
-      .map((profile) => {
-        const requirement = user.vip
-          ? profile.requirements
-          : "开通会员后可查看对方的择偶要求";
-        const lockedClass = user.vip ? "" : " locked";
-        return `
-          <article class="profile-card">
-            <div class="profile-photo" style="background-image:url('${profile.photo}')"></div>
-            <div class="profile-body">
-              <div class="profile-head">
-                <strong>${profile.name}</strong>
-                <span class="profile-meta">${profile.age} 岁 · ${profile.city}</span>
-              </div>
-              <div class="profile-meta">${profile.gender} · ${profile.job}</div>
-              <p>${profile.bio}</p>
-              <div class="requirement-box${lockedClass}">${requirement}</div>
-              <button class="primary-button" data-connect="${profile.id}" type="button">申请牵线</button>
-            </div>
-          </article>
-        `;
-      })
-      .join("") || `<div class="request-card muted">暂无符合筛选条件的资料。</div>`;
+  if (profiles.length === 0) {
+    $("#profileList").innerHTML = `<div class="request-card muted">暂无符合筛选条件的资料。</div>`;
+    return;
+  }
+
+  if (currentDiscoverIndex >= profiles.length) {
+    currentDiscoverIndex = 0;
+  }
+
+  const profile = profiles[currentDiscoverIndex];
+  
+  $("#profileList").innerHTML = `
+    <article class="profile-card" style="cursor: pointer;" data-view-detail="${profile.id}">
+      <div class="profile-photo" style="background-image:url('${profile.photo}')"></div>
+      <div class="profile-body">
+        <div class="profile-head">
+          <strong>${profile.name}</strong>
+          <span class="profile-meta">${profile.age} 岁 · ${profile.city}</span>
+        </div>
+        <div class="profile-meta">${profile.gender} · ${profile.job}</div>
+        <p>${profile.bio.substring(0, 45)}...</p>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+          <button class="primary-button" style="flex: 1;" data-view-detail="${profile.id}" type="button">查看详细资料</button>
+          <button class="secondary-button" id="nextDiscoverBtn" style="flex: 1; background: #f3f4f6; color: #374151;" type="button">换一位 ➔</button>
+        </div>
+      </div>
+    </article>
+  `;
 }
 
-async function createRequest(targetUserId) {
+function showProfileDetail(profileId) {
+  const profile = state.users.find(u => u.id === profileId);
+  const user = currentUser();
+  if (!profile || !user) return;
+
+  const requirement = user.vip
+    ? profile.requirements
+    : "开通会员后可查看对方的择偶要求";
+  const lockedClass = user.vip ? "" : " locked";
+
+  const delegatedMms = (profile.delegatedMatchmakerIds || [])
+    .map(id => getMatchmaker(id))
+    .filter(Boolean);
+
+  let matchmakerDropdownHtml = "";
+  if (delegatedMms.length > 0) {
+    matchmakerDropdownHtml = `
+      <label class="wide" style="display: block; margin-bottom: 12px; text-align: left;">
+        <span style="font-weight: bold; margin-bottom: 6px; display: block; color: var(--coral);">选择联系的红娘：</span>
+        <select id="connectMatchmakerSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; outline: none; background: #fff; font-size: 13px;">
+          ${delegatedMms.map(mm => `<option value="${mm.id}">${mm.name} (${mm.code})</option>`).join("")}
+        </select>
+      </label>
+    `;
+  } else {
+    const fallbackMm = state.matchmakers[0];
+    matchmakerDropdownHtml = `
+      <label class="wide" style="display: block; margin-bottom: 12px; text-align: left;">
+        <span style="font-weight: bold; margin-bottom: 6px; display: block; color: var(--coral);">选择联系的红娘：</span>
+        <select id="connectMatchmakerSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; outline: none; background: #fff; font-size: 13px;">
+          <option value="${fallbackMm.id}">${fallbackMm.name} (${fallbackMm.code})</option>
+        </select>
+      </label>
+    `;
+  }
+
+  const modalBody = $("#profileDetailModalBody");
+  if (modalBody) {
+    modalBody.innerHTML = `
+      <div style="background-image: url('${profile.photo}'); height: 200px; background-size: cover; background-position: center; border-radius: 8px; position: relative;">
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); padding: 15px; color: #fff; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left;">${profile.name}</h3>
+          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left;">${profile.gender} · ${profile.age} 岁 · ${profile.city}</p>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 4px; text-align: left;">
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">职业身份</span>
+          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profile.job}</p>
+        </div>
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">自我介绍</span>
+          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profile.bio}</p>
+        </div>
+        <div>
+          <span style="font-weight: bold; color: var(--coral); font-size: 13px;">择偶要求</span>
+          <div class="requirement-box${lockedClass}" style="margin-top: 4px; padding: 10px; font-size: 14px;">${requirement}</div>
+        </div>
+      </div>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+      <div>
+        ${matchmakerDropdownHtml}
+        <button class="primary-button wide" id="applyMatchRequestBtn" data-profile-id="${profile.id}" type="button" style="margin-top: 5px;">申请牵线</button>
+      </div>
+    `;
+  }
+
+  const modal = $("#profileDetailModal");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.classList.add("show");
+  }
+}
+
+async function createRequest(targetUserId, matchmakerId) {
   const user = currentUser();
   const target = state.users.find((item) => item.id === targetUserId);
   if (!user.vip) {
     showToast("请先扫码开通会员，再提交牵线请求");
     const is8096 = isMiniView();
     navigate(is8096 ? "/vip" : "/mini/vip");
+    
+    const modal = $("#profileDetailModal");
+    if (modal) {
+      modal.style.display = "none";
+      modal.classList.remove("show");
+    }
     return;
   }
 
@@ -997,15 +1116,12 @@ async function createRequest(targetUserId) {
     return;
   }
 
-  const matchmakerId =
-    user.referralMatchmakerId || target.referralMatchmakerId || state.matchmakers[0]?.id;
-
   if (apiAvailable) {
     try {
       const res = await fetch(`${API_BASE}/client/match-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ targetUserId })
+        body: JSON.stringify({ targetUserId, matchmakerId })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -1033,6 +1149,12 @@ async function createRequest(targetUserId) {
     saveState();
     renderAll();
     showToast(`已通知红娘为你和${target.name}牵线`);
+  }
+
+  const modal = $("#profileDetailModal");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("show");
   }
 
   const matchmaker = getMatchmaker(matchmakerId);
@@ -1800,6 +1922,11 @@ async function saveProfile(event) {
   });
   updatedData.age = Number(form.elements.age.value);
 
+  const delegatedMmCheckboxes = form.querySelectorAll('input[name="delegatedMatchmakers"]:checked');
+  const delegatedMatchmakerIds = Array.from(delegatedMmCheckboxes).map(cb => cb.value);
+  updatedData.delegatedMatchmakerIds = delegatedMatchmakerIds;
+  updatedData.referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+
   if (apiAvailable) {
     try {
       const res = await fetch(`${API_BASE}/client/profile`, {
@@ -2104,6 +2231,9 @@ async function miniRegisterUser(event) {
   const photo = photoPool[Math.floor(Math.random() * photoPool.length)];
   const name = form.elements.name.value.trim();
 
+  const delegatedMmCheckboxes = form.querySelectorAll('input[name="delegatedMatchmakers"]:checked');
+  const delegatedMatchmakerIds = Array.from(delegatedMmCheckboxes).map(cb => cb.value);
+
   let data;
   try {
     const response = await fetch(`${API_BASE}/auth/client/register`, {
@@ -2122,6 +2252,7 @@ async function miniRegisterUser(event) {
         bio: form.elements.bio.value.trim(),
         requirements: form.elements.requirements.value.trim(),
         photo,
+        delegatedMatchmakerIds,
       }),
     });
     if (!response.ok) throw new Error("register failed");
@@ -2139,7 +2270,7 @@ async function miniRegisterUser(event) {
   renderAll();
   showToast(`注册成功！已为您登录为 ${name}`);
 
-  logEvent("user", `新客户在小程序端注册成功：${name} (${gender}·${newUser.age}岁·${newUser.city})`);
+  logEvent("user", `新客户在小程序端注册成功：${name} (${gender}·${data.user.age}岁·${data.user.city})`);
   showPushNotification("【客户注册成功通知】", {
     "注册客户": name,
     "性别年龄": `${gender} · ${data.user.age}岁`,
@@ -2334,12 +2465,49 @@ function bindEvents() {
   });
   
   ["#genderFilter", "#cityFilter", "#ageFilter"].forEach((selector) => {
-    safeBind(selector, "change", renderProfiles);
+    safeBind(selector, "change", () => {
+      currentDiscoverIndex = 0;
+      renderProfiles();
+    });
   });
   
   safeBind("#profileList", "click", (event) => {
-    const button = event.target.closest("[data-connect]");
-    if (button) createRequest(button.dataset.connect);
+    const nextBtn = event.target.closest("#nextDiscoverBtn");
+    if (nextBtn) {
+      currentDiscoverIndex++;
+      renderProfiles();
+      return;
+    }
+    const card = event.target.closest("[data-view-detail]");
+    if (card) {
+      showProfileDetail(card.dataset.viewDetail);
+    }
+  });
+
+  safeBind("#closeProfileDetailModalBtn", "click", () => {
+    const modal = $("#profileDetailModal");
+    if (modal) {
+      modal.style.display = "none";
+      modal.classList.remove("show");
+    }
+  });
+
+  safeBind("#profileDetailModal", "click", (event) => {
+    if (event.target === event.currentTarget) {
+      event.currentTarget.style.display = "none";
+      event.currentTarget.classList.remove("show");
+      return;
+    }
+    const applyBtn = event.target.closest("#applyMatchRequestBtn");
+    if (applyBtn) {
+      const select = $("#connectMatchmakerSelect");
+      const matchmakerId = select ? select.value : null;
+      if (!matchmakerId) {
+        showToast("请选择联系的红娘");
+        return;
+      }
+      createRequest(applyBtn.dataset.profileId, matchmakerId);
+    }
   });
   
   safeBind("#notificationList", "click", (event) => {

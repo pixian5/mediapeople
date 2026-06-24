@@ -186,6 +186,12 @@ const seedState = {
   ],
 };
 
+seedState.users.forEach((u) => {
+  if (!u.delegatedMatchmakerIds) {
+    u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
+  }
+});
+
 const pool = new Pool(
   process.env.DATABASE_URL
     ? { connectionString: process.env.DATABASE_URL }
@@ -423,7 +429,13 @@ async function readState() {
     splits: runtimeSettings.splits,
     agencies: agenciesRes.rows.map(r => r.raw),
     matchmakers: matchmakersRes.rows.map(r => r.raw),
-    users: usersRes.rows.map(r => r.raw),
+    users: usersRes.rows.map(r => {
+      const u = r.raw;
+      if (!u.delegatedMatchmakerIds) {
+        u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
+      }
+      return u;
+    }),
     requests: requestsRes.rows.map(r => r.raw),
     deals: dealsRes.rows.map(r => r.raw),
     promoCodes: promoCodesRes.rows.map(r => r.raw),
@@ -772,6 +784,9 @@ app.post("/api/auth/client/register", async (request, response) => {
     return;
   }
 
+  const delegatedMatchmakerIds = Array.isArray(input.delegatedMatchmakerIds) ? input.delegatedMatchmakerIds : [];
+  const referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+
   const user = {
     id: `u${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
     name: String(input.name || "").trim(),
@@ -789,7 +804,8 @@ app.post("/api/auth/client/register", async (request, response) => {
     realName: null,
     idCard: null,
     vip: false,
-    referralMatchmakerId: null,
+    referralMatchmakerId,
+    delegatedMatchmakerIds,
     bio: String(input.bio || "").trim(),
     requirements: String(input.requirements || "").trim(),
     photo: input.photo || null,
@@ -872,7 +888,7 @@ app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
 // 1. 客户：修改个人资料
 app.patch("/api/client/profile", requireAuth(["client"]), async (request, response) => {
   const userId = request.user.sub;
-  const { name, gender, age, city, job, wechat, bio, requirements } = request.body || {};
+  const { name, gender, age, city, job, wechat, bio, requirements, delegatedMatchmakerIds } = request.body || {};
   
   const userRes = await pool.query("select raw from users where id = $1", [userId]);
   if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
@@ -887,9 +903,14 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   user.bio = bio !== undefined ? bio.trim() : user.bio;
   user.requirements = requirements !== undefined ? requirements.trim() : user.requirements;
   
+  if (Array.isArray(delegatedMatchmakerIds)) {
+    user.delegatedMatchmakerIds = delegatedMatchmakerIds;
+    user.referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+  }
+  
   await pool.query(
-    `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, raw = $7, updated_at = now() where id = $8`,
-    [user.name, user.gender, user.age, user.city, user.job, user.wechat, JSON.stringify(user), userId]
+    `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, referral_matchmaker_id = $7, raw = $8, updated_at = now() where id = $9`,
+    [user.name, user.gender, user.age, user.city, user.job, user.wechat, user.referralMatchmakerId || null, JSON.stringify(user), userId]
   );
   response.json({ user, state: publicState(await readState()) });
 });
@@ -1011,7 +1032,7 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
 // 4. 客户：申请牵线
 app.post("/api/client/match-requests", requireAuth(["client"]), async (request, response) => {
   const userId = request.user.sub;
-  const { targetUserId } = request.body || {};
+  let { targetUserId, matchmakerId } = request.body || {};
   if (!targetUserId) return response.status(400).json({ error: "target_user_required" });
 
   const fromUserRes = await pool.query("select raw from users where id = $1", [userId]);
@@ -1030,7 +1051,9 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
   if (duplicateRes.rows.length > 0) return response.status(409).json({ error: "request_pending" });
 
   const reqId = `r${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
-  const matchmakerId = fromUser.referralMatchmakerId || toUser.referralMatchmakerId || null;
+  if (!matchmakerId) {
+    matchmakerId = fromUser.referralMatchmakerId || toUser.referralMatchmakerId || null;
+  }
   const matchReq = {
     id: reqId,
     fromUserId: userId,
