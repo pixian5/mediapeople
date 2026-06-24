@@ -2126,9 +2126,11 @@ function renderMatchmakerChats(matchmakerId) {
   const messages = getThreadMessages(activeThread.id);
   if (!messages.length) {
     emptyEl.style.display = "block";
+    messagesEl.style.display = "none";
     messagesEl.innerHTML = "";
   } else {
     emptyEl.style.display = "none";
+    messagesEl.style.display = "flex";
     messagesEl.innerHTML = messages
       .map((message) => {
         const mine = message.senderRole === "matchmaker" && message.senderId === matchmakerId;
