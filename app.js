@@ -1627,6 +1627,7 @@ function renderMiniChatSections(user, requests) {
   }
 
   panel.style.display = "block";
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   panelTitle.textContent = getThreadDisplayName(activeThread, "client", user.id);
   panelMeta.textContent = getThreadSubtitle(activeThread);
   const messages = getThreadMessages(activeThread.id);
@@ -1650,6 +1651,7 @@ function renderMiniChatSections(user, requests) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
   input.placeholder = activeThread.type === "member_member" ? "和对方打个招呼吧" : "把你的想法发给红娘";
+  input.focus();
 }
 
 async function becomeVip() {
@@ -2117,6 +2119,7 @@ function renderMatchmakerChats(matchmakerId) {
   }
 
   panel.style.display = "block";
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   title.textContent = getThreadDisplayName(activeThread, "matchmaker", matchmakerId);
   meta.textContent = getThreadSubtitle(activeThread);
   const messages = getThreadMessages(activeThread.id);
@@ -2140,6 +2143,7 @@ function renderMatchmakerChats(matchmakerId) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
   input.placeholder = "给会员发送消息";
+  input.focus();
 }
 
 async function completeRequest(requestId) {
