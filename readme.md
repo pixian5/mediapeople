@@ -45,6 +45,22 @@ http://uk.sbbz.tech:8097/  红娘工作台入口
 http://uk.sbbz.tech:8098/  管理后台入口
 ```
 
+HTTPS 角色端口：
+
+```text
+https://uk.sbbz.tech:9445/  综合预览端
+https://uk.sbbz.tech:9446/  小程序客户入口
+https://uk.sbbz.tech:9447/  红娘工作台入口
+https://uk.sbbz.tech:9448/  管理后台入口
+```
+
+服务器上 443 端口已被现有网关服务占用，当前项目通过 `compose.ssl.yml` 额外开放 9445-9448 作为 HTTPS 端口，并复用服务器证书：
+
+```text
+/root/.acme.sh/sbbz.tech_ecc/fullchain.cer
+/root/.acme.sh/sbbz.tech_ecc/sbbz.tech.key
+```
+
 以上入口共用同一个 API 和 PostgreSQL 数据库，但前端入口已经完全拆开：
 
 ```text
@@ -64,6 +80,12 @@ index.html       综合预览端
 
 ```bash
 docker compose up -d web
+```
+
+启动 HTTP + HTTPS 全部角色入口：
+
+```bash
+docker compose -f compose.yml -f compose.ssl.yml up -d
 ```
 
 PostgreSQL 使用 Docker Compose 部署，数据目录为：
