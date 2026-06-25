@@ -42,9 +42,8 @@
                   <div class="vip-badge" id="vipState">普通用户</div>
                 </header>
 
-                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="tabs compact-tabs" role="tablist" aria-label="小程序功能" style="grid-template-columns: repeat(3, 1fr);">
                   <button class="tab active" data-mini-tab="discover">筛选</button>
-                  <button class="tab" data-mini-tab="profile">资料</button>
                   <button class="tab" data-mini-tab="requests">消息</button>
                   <button class="tab" data-mini-tab="mine">我的</button>
                 </div>
@@ -87,66 +86,6 @@
                     <div id="profileList" class="profile-list"></div>
                   </div>
                 </section>
-
-                <section class="mini-tab" id="profileTab">
-                  <!-- 未登录锁 -->
-                  <div class="mini-lock-overlay" id="profileLock" style="display: none;">
-                    <div class="lock-content">
-                      <div class="lock-icon">🔒</div>
-                      <h3>完善个人资料</h3>
-                      <p>您当前以游客身份访问，请先注册或登录个人账号</p>
-                      <button class="primary-button mini-to-register-btn" type="button">去登录 / 注册</button>
-                    </div>
-                  </div>
-
-                  <!-- 正常内容 -->
-                  <div id="profileContent">
-                    <form class="form-grid" id="profileForm">
-                      <label>
-                        <span>姓名</span>
-                        <input name="name" required />
-                      </label>
-                      <label>
-                        <span>性别</span>
-                        <select name="gender">
-                          <option>男</option>
-                          <option>女</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>年龄</span>
-                        <input name="age" type="number" min="18" max="70" required />
-                      </label>
-                      <label>
-                        <span>城市</span>
-                        <input name="city" required />
-                      </label>
-                      <label>
-                        <span>职业</span>
-                        <input name="job" required />
-                      </label>
-                      <label>
-                        <span>微信</span>
-                        <input name="wechat" required />
-                      </label>
-                      <label class="wide">
-                        <span>自我介绍</span>
-                        <textarea name="bio" rows="3" required></textarea>
-                      </label>
-                      <label class="wide">
-                        <span>对另一半的要求</span>
-                        <textarea name="requirements" rows="3" required></textarea>
-                      </label>
-                      <div class="wide" style="margin-top: 10px; margin-bottom: 5px;">
-                        <span>选择要委托的红娘 (可多选)</span>
-                        <div id="profileMatchmakersContainer" style="display: flex; gap: 15px; margin-top: 5px;"></div>
-                      </div>
-                      <button class="primary-button wide" type="submit">保存资料</button>
-                    </form>
-                  </div>
-                </section>
-
-
 
                 <section class="mini-tab" id="requestsTab">
                   <!-- 未登录锁 -->
@@ -321,6 +260,61 @@
                           <span class="status-badge gray">hqlak47@gmail.com</span>
                         </div>
                       </div>
+
+                      <section class="panel" style="margin-top: 14px;">
+                        <div class="section-title">
+                          <div>
+                            <h3>我的资料</h3>
+                            <span>修改后需绑定红娘审核发布</span>
+                          </div>
+                        </div>
+                        <form class="form-grid" id="profileForm">
+                          <label>
+                            <span>姓名</span>
+                            <input name="name" required />
+                          </label>
+                          <label>
+                            <span>性别</span>
+                            <select name="gender">
+                              <option>男</option>
+                              <option>女</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>年龄</span>
+                            <input name="age" type="number" min="18" max="70" required />
+                          </label>
+                          <label>
+                            <span>城市</span>
+                            <input name="city" required />
+                          </label>
+                          <label>
+                            <span>职业</span>
+                            <input name="job" required />
+                          </label>
+                          <label>
+                            <span>微信</span>
+                            <input name="wechat" required />
+                          </label>
+                          <label class="wide">
+                            <span>自我介绍</span>
+                            <textarea name="bio" rows="3" required></textarea>
+                          </label>
+                          <label class="wide">
+                            <span>对另一半的要求</span>
+                            <textarea name="requirements" rows="3" required></textarea>
+                          </label>
+                          <div class="wide" style="margin-top: 10px; margin-bottom: 5px;">
+                            <span>选择要委托的红娘 (可多选)</span>
+                            <div id="profileMatchmakersContainer" style="display: flex; gap: 15px; margin-top: 5px;"></div>
+                          </div>
+                          <label class="wide" style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                            <input id="syncAllMatchmakersInput" name="syncAllMatchmakers" type="checkbox" />
+                            <span>一键同步到所有已绑定红娘</span>
+                          </label>
+                          <button class="primary-button wide" type="submit">保存资料并提交审核</button>
+                        </form>
+                      </section>
 
                       <!-- 账号操作菜单 -->
                       <div class="pay-card" style="padding: 0;">

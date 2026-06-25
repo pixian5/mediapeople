@@ -581,7 +581,8 @@ function handleRouting() {
     if (path === "/" || path === "/discover") {
       switchMiniTab("discover");
     } else if (path === "/profile") {
-      switchMiniTab("profile");
+      switchMiniTab("mine");
+      showVipSubpanel(false);
     } else if (path === "/vip") {
       switchMiniTab("mine");
       showVipSubpanel(true);
@@ -649,7 +650,8 @@ function handleRouting() {
       if (sub === "" || sub === "/" || sub === "/discover") {
         switchMiniTab("discover");
       } else if (sub === "/profile") {
-        switchMiniTab("profile");
+        switchMiniTab("mine");
+        showVipSubpanel(false);
       } else if (sub === "/vip") {
         switchMiniTab("mine");
         showVipSubpanel(true);
@@ -1078,7 +1080,8 @@ function syncMiniTabFromLocation() {
   if (!isMiniPath) return;
 
   if (path.endsWith("/profile")) {
-    switchMiniTab("profile");
+    switchMiniTab("mine");
+    showVipSubpanel(false);
   } else if (path.endsWith("/requests")) {
     switchMiniTab("requests");
   } else if (path.endsWith("/vip")) {
@@ -3390,7 +3393,6 @@ function bindEvents() {
       const prefix = is8096 ? "" : "/mini";
       const tabPathMap = {
         discover: "/discover",
-        profile: "/profile",
         vip: "/vip",
         requests: "/requests",
         mine: "/my"
