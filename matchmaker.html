@@ -95,39 +95,28 @@
               <div id="matchmakerChatThreadList" style="display: none;"></div>
             </div>
           </div>
-
-          <!-- 红娘聊天独立页面 -->
-          <div id="matchmakerChatView" style="display: none;">
-            <div class="toolbar">
-              <button class="ghost-button" id="backFromMmChatBtn" type="button" style="width: auto; color: var(--teal); border-color: rgba(15, 118, 110, 0.3); background: rgba(15, 118, 110, 0.05);">← 返回工作台</button>
-              <div>
-                <span class="eyebrow">会员聊天</span>
-                <h2 id="matchmakerChatTitle">聊天窗口</h2>
-              </div>
-            </div>
-            <span id="matchmakerChatMeta" style="font-size: 13px; color: var(--muted); margin-bottom: 12px; display: block;">请选择一个会话</span>
-            <div class="workbench-grid">
-              <section class="panel">
-                <div class="section-title">
-                  <h3>会话列表</h3>
-                </div>
-                <div id="matchmakerChatThreadList" class="request-list"></div>
-              </section>
-              <section class="panel" id="matchmakerChatPanel" style="display: flex; flex-direction: column; min-height: 400px;">
-                <div id="matchmakerChatEmpty" class="request-card muted" style="flex: 1; display: flex; align-items: center; justify-content: center; margin: 0;">还没有聊天消息。</div>
-                <div id="matchmakerChatMessages" class="contact-panel" style="flex: 1; overflow-y: auto; flex-direction: column; gap: 12px; padding: 12px; background: rgba(248, 250, 252, 0.6); border-radius: 12px; border: 1px solid var(--line); margin-bottom: 8px;"></div>
-                <form id="matchmakerChatForm" class="stack-form" style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: auto;">
-                  <input id="matchmakerChatInput" placeholder="给会员发送消息" style="margin-bottom: 0;" />
-                  <button class="primary-button" type="submit" style="min-height: 40px; margin-bottom: 0; width: 80px;">发送</button>
-                </form>
-              </section>
-            </div>
-          </div>
         </section>
       </main>
     </div>
 
-
+  <!-- 红娘专属聊天模态弹窗 (Matchmaker Chat Modal) -->
+  <div class="modal-backdrop" id="matchmakerChatPanel" style="display: none;">
+    <div class="modal-content" style="max-width: 550px; display: flex; flex-direction: column; height: 80vh; max-height: 600px;">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 8px;">
+        <div>
+          <h2 id="matchmakerChatTitle" style="margin: 0; font-size: 18px;">聊天窗口</h2>
+          <span id="matchmakerChatMeta" style="font-size: 12px; color: var(--muted);">请选择一个会话</span>
+        </div>
+        <button class="modal-close" id="closeMatchmakerChatModalBtn" type="button">&times;</button>
+      </div>
+      <div id="matchmakerChatEmpty" class="request-card muted" style="flex: 1; display: flex; align-items: center; justify-content: center; margin: 0;">还没有聊天消息。</div>
+      <div id="matchmakerChatMessages" class="contact-panel" style="flex: 1; overflow-y: auto; flex-direction: column; gap: 12px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); margin-bottom: 8px;"></div>
+      <form id="matchmakerChatForm" class="stack-form" style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: auto;">
+        <input id="matchmakerChatInput" placeholder="输入消息" style="margin-bottom: 0;" />
+        <button class="primary-button" type="submit" style="min-height: 40px; margin-bottom: 0; width: 80px;">发送</button>
+      </form>
+    </div>
+  </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/app.js?v=__ASSET_VERSION__"></script>

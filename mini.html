@@ -158,7 +158,20 @@
                     </div>
                     <div id="memberMutualChatList" class="request-list"></div>
 
-
+                    <section class="panel" id="miniChatPanel" style="display: none; margin-top: 18px;">
+                      <div class="section-title">
+                        <div>
+                          <h3 id="miniChatTitle">聊天窗口</h3>
+                          <span id="miniChatMeta">请选择一个会话</span>
+                        </div>
+                      </div>
+                      <div id="miniChatEmpty" class="request-card muted">还没有聊天消息，先发第一句吧。</div>
+                      <div id="miniChatMessages" class="contact-panel"></div>
+                      <form id="miniChatForm" class="stack-form" style="grid-template-columns: 1fr auto; margin-top: 12px;">
+                        <input id="miniChatInput" placeholder="输入消息" />
+                        <button class="primary-button" type="submit" style="min-height: 40px;">发送</button>
+                      </form>
+                    </section>
                   </div>
                 </section>
 
@@ -340,30 +353,6 @@
                     </div>
                   </div>
                 </section>
-
-                <!-- 嘉宾详细资料独立页面 -->
-                <section class="mini-tab" id="miniProfileDetailView" style="display: none;">
-                  <button class="ghost-button" id="backFromProfileDetailBtn" type="button" style="width: auto; margin-bottom: 12px; padding: 6px 12px; font-size: 13px;">← 返回</button>
-                  <h3 style="margin: 0 0 12px 0; font-weight: 800;">💖 嘉宾详细资料</h3>
-                  <div id="profileDetailViewBody" style="display: flex; flex-direction: column; gap: 16px;"></div>
-                </section>
-
-                <!-- 会员聊天独立页面 -->
-                <section class="mini-tab" id="miniChatView" style="display: none;">
-                  <button class="ghost-button" id="backFromMiniChatBtn" type="button" style="width: auto; margin-bottom: 12px; padding: 6px 12px; font-size: 13px;">← 返回消息列表</button>
-                  <div class="section-title">
-                    <div>
-                      <h3 id="miniChatTitle">聊天窗口</h3>
-                      <span id="miniChatMeta">请选择一个会话</span>
-                    </div>
-                  </div>
-                  <div id="miniChatEmpty" class="request-card muted">还没有聊天消息，先发第一句吧。</div>
-                  <div id="miniChatMessages" class="contact-panel"></div>
-                  <form id="miniChatForm" class="stack-form" style="grid-template-columns: 1fr auto; margin-top: 12px;">
-                    <input id="miniChatInput" placeholder="输入消息" />
-                    <button class="primary-button" type="submit" style="min-height: 40px;">发送</button>
-                  </form>
-                </section>
               </div>
             </div>
 
@@ -473,7 +462,18 @@
     </div>
   </div>
 
-
+  <!-- 嘉宾详细资料模态弹窗 (Guest Details Modal) -->
+  <div class="modal-backdrop" id="profileDetailModal" style="display: none;">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2>💖 嘉宾详细资料</h2>
+        <button class="modal-close" id="closeProfileDetailModalBtn" type="button">&times;</button>
+      </div>
+      <div id="profileDetailModalBody" style="padding: 10px 0 0 0; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Container filled dynamically -->
+      </div>
+    </div>
+  </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/app.js?v=__ASSET_VERSION__"></script>

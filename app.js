@@ -189,6 +189,9 @@ const seedState = {
 };
 
 seedState.users.forEach((u) => {
+  if (!u.vipMatchmakerIds) {
+    u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
+  }
   if (!u.delegatedMatchmakerIds) {
     u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
   }
@@ -218,6 +221,13 @@ function ensureStateDefaults(s) {
     if (!u.delegatedMatchmakerIds) {
       u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
     }
+    if (!Array.isArray(u.vipMatchmakerIds)) {
+      u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
+    }
+    if (!u.profileByMatchmaker || typeof u.profileByMatchmaker !== "object") {
+      u.profileByMatchmaker = {};
+    }
+    u.vip = u.vip || u.vipMatchmakerIds.length > 0;
   });
   // Ensure u1 has phone and email, u2 has only email (no phone) to test phone supplement
   const u1 = s.users.find((u) => u.id === "u1");
@@ -246,7 +256,7 @@ function ensureStateDefaults(s) {
     if (request.maleContacted === undefined) request.maleContacted = request.status === "已联系双方" || request.status === "来和双方对话" || request.status === "已联系男方" || request.status === "联系男方";
     if (request.femaleContacted === undefined) request.femaleContacted = request.status === "已联系双方" || request.status === "来和双方对话" || request.status === "已联系女方" || request.status === "联系女方";
     request.status = getRequestContactStatus(request);
-    request.memberChatEnabled = true;
+    if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
     return request;
   });
   s.chatThreads = s.chatThreads.map((thread) => {
@@ -736,6 +746,37 @@ function getAgency(id) {
   return state.agencies.find((agency) => agency.id === id);
 }
 
+function getUserVipMatchmakerIds(user) {
+  if (!user) return [];
+  if (Array.isArray(user.vipMatchmakerIds)) return user.vipMatchmakerIds;
+  return user.vip && user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
+}
+
+function isVipForMatchmaker(user, matchmakerId) {
+  return Boolean(matchmakerId && getUserVipMatchmakerIds(user).includes(matchmakerId));
+}
+
+function addVipMatchmaker(user, matchmakerId) {
+  if (!user || !matchmakerId) return;
+  if (!Array.isArray(user.vipMatchmakerIds)) user.vipMatchmakerIds = getUserVipMatchmakerIds(user);
+  if (!user.vipMatchmakerIds.includes(matchmakerId)) user.vipMatchmakerIds.push(matchmakerId);
+  if (!Array.isArray(user.delegatedMatchmakerIds)) user.delegatedMatchmakerIds = [];
+  if (!user.delegatedMatchmakerIds.includes(matchmakerId)) user.delegatedMatchmakerIds.push(matchmakerId);
+  if (!user.referralMatchmakerId) user.referralMatchmakerId = matchmakerId;
+  user.vip = true;
+}
+
+function getUserBoundMatchmakerIds(user) {
+  if (!user) return [];
+  const ids = Array.isArray(user.delegatedMatchmakerIds) ? user.delegatedMatchmakerIds : [];
+  return ids.length ? ids : getUserVipMatchmakerIds(user);
+}
+
+function getVisibleProfile(user, matchmakerId) {
+  const profile = user?.profileByMatchmaker?.[matchmakerId];
+  return profile?.published || user;
+}
+
 function getRequestById(id) {
   return state.requests.find((request) => request.id === id);
 }
@@ -1093,9 +1134,10 @@ function renderMiniApp() {
   }
   
   // VIP Badge
-  $("#vipState").textContent = user ? (user.vip ? "VIP 会员" : "普通用户") : "游客访客";
-  $("#vipState").style.background = user ? (user.vip ? "#d9f7e8" : "#fff1c7") : "#eef2f5";
-  $("#vipState").style.color = user ? (user.vip ? "#166534" : "#7a4a08") : "#6d7785";
+  const headerVipCount = user ? getUserVipMatchmakerIds(user).length : 0;
+  $("#vipState").textContent = user ? (headerVipCount ? `${headerVipCount} 位红娘 VIP` : "普通用户") : "游客访客";
+  $("#vipState").style.background = user ? (headerVipCount ? "#d9f7e8" : "#fff1c7") : "#eef2f5";
+  $("#vipState").style.color = user ? (headerVipCount ? "#166534" : "#7a4a08") : "#6d7785";
 
   // Become VIP Button & Expiry Date update
   const becomeVipBtn = $("#becomeVipBtn");
@@ -1112,19 +1154,16 @@ function renderMiniApp() {
       becomeVipBtn.style.background = ""; 
       if (vipExpiryDate) vipExpiryDate.style.display = "none";
     } else {
-      // User is VIP
       const referralInput = $("#referralCodeInput");
       const code = referralInput ? referralInput.value.trim() : "";
       const m = state.matchmakers.find(item => item.code.toUpperCase() === code.toUpperCase());
       
-      if (m && m.id !== user.referralMatchmakerId) {
-        // Selected matchmaker is different from current referralMatchmakerId
-        becomeVipBtn.textContent = "确认修改红娘并重新开通";
+      if (m && !isVipForMatchmaker(user, m.id)) {
+        becomeVipBtn.textContent = "为该红娘开通 VIP";
         becomeVipBtn.disabled = false;
         becomeVipBtn.style.background = ""; 
       } else {
-        // Selected is same or none selected
-        becomeVipBtn.textContent = "已是会员";
+        becomeVipBtn.textContent = m ? "已是该红娘 VIP" : "已是会员";
         becomeVipBtn.disabled = true;
         becomeVipBtn.style.background = "#9ca3af"; 
       }
@@ -1170,6 +1209,8 @@ function renderProfileForm() {
         form.elements[key].value = value;
       }
     });
+    const syncAll = $("#syncAllMatchmakersInput");
+    if (syncAll) syncAll.checked = false;
 
     const container = $("#profileMatchmakersContainer");
     if (container) {
@@ -1221,7 +1262,8 @@ function renderMineTabContent() {
     $("#miniMineDetails").textContent = `${user.gender} · ${user.age} 岁 · ${user.city}`;
     
     const badge = $("#miniMineVip");
-    badge.textContent = user.vip ? "VIP 会员" : "普通用户";
+    const vipMatchmakerIds = getUserVipMatchmakerIds(user);
+    badge.textContent = vipMatchmakerIds.length ? `${vipMatchmakerIds.length} 位红娘 VIP` : "普通用户";
     badge.style.background = user.vip ? "#d9f7e8" : "#fff1c7";
     badge.style.color = user.vip ? "#166534" : "#7a4a08";
 
@@ -1231,11 +1273,11 @@ function renderMineTabContent() {
     const referralMm = user.referralMatchmakerId ? getMatchmaker(user.referralMatchmakerId) : null;
 
     $("#mineStatRequests").textContent = userReqs.length;
-    $("#mineStatVIP").textContent = user.vip ? "VIP" : "普通";
+    $("#mineStatVIP").textContent = vipMatchmakerIds.length ? `${vipMatchmakerIds.length} 位` : "普通";
     $("#mineStatUnlocked").textContent = unlockedReqs.length;
 
     // 动态设置功能选项菜单内容
-    $("#mineMenuVipStatus").textContent = user.vip ? "已开通 VIP 会员" : "开通会员解锁要求";
+    $("#mineMenuVipStatus").textContent = vipMatchmakerIds.length ? `已绑定 ${vipMatchmakerIds.length} 位红娘` : "开通会员解锁要求";
     $("#mineMenuMatchmaker").textContent = referralMm ? `${referralMm.name} (${referralMm.code})` : "待分配";
 
     const realNameBadge = $("#miniMineRealNameStatus");
@@ -1288,9 +1330,11 @@ function renderProfiles() {
   }
 
   const profile = profiles[currentDiscoverIndex];
+  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || profile.referralMatchmakerId || null;
+  const profileView = getVisibleProfile(profile, profileMatchmakerId);
   
   const requirement = user.vip
-    ? profile.requirements
+    ? profileView.requirements
     : "开通会员后可查看对方的择偶要求";
   const lockedClass = user.vip ? "" : " locked";
 
@@ -1322,20 +1366,20 @@ function renderProfiles() {
 
   $("#profileList").innerHTML = `
     <article class="profile-card" style="border: 1px solid var(--line); border-radius: 8px; background: white; overflow: hidden; display: flex; flex-direction: column;">
-      <div style="background-image: url('${profile.photo}'); height: 220px; background-size: cover; background-position: center; position: relative;">
+      <div style="background-image: url('${profileView.photo || profile.photo}'); height: 220px; background-size: cover; background-position: center; position: relative;">
         <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); padding: 15px; color: #fff;">
-          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left; color: #fff;">${profile.name}</h3>
-          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left; color: #fff; opacity: 0.9;">${profile.gender} · ${profile.age} 岁 · ${profile.city}</p>
+          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left; color: #fff;">${profileView.name}</h3>
+          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left; color: #fff; opacity: 0.9;">${profileView.gender} · ${profileView.age} 岁 · ${profileView.city}</p>
         </div>
       </div>
       <div class="profile-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; text-align: left;">
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">职业身份</span>
-          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profile.job}</p>
+          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profileView.job}</p>
         </div>
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">自我介绍</span>
-          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profile.bio}</p>
+          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profileView.bio}</p>
         </div>
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">择偶要求</span>
@@ -1358,9 +1402,11 @@ function showProfileDetail(profileId) {
   const profile = state.users.find(u => u.id === profileId);
   const user = currentUser();
   if (!profile || !user) return;
+  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || profile.referralMatchmakerId || null;
+  const profileView = getVisibleProfile(profile, profileMatchmakerId);
 
   const requirement = user.vip
-    ? profile.requirements
+    ? profileView.requirements
     : "开通会员后可查看对方的择偶要求";
   const lockedClass = user.vip ? "" : " locked";
 
@@ -1419,20 +1465,20 @@ function showProfileDetail(profileId) {
   const modalBody = $("#profileDetailModalBody");
   if (modalBody) {
     modalBody.innerHTML = `
-      <div style="background-image: url('${profile.photo}'); height: 200px; background-size: cover; background-position: center; border-radius: 8px; position: relative;">
+      <div style="background-image: url('${profileView.photo || profile.photo}'); height: 200px; background-size: cover; background-position: center; border-radius: 8px; position: relative;">
         <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); padding: 15px; color: #fff; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
-          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left;">${profile.name}</h3>
-          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left;">${profile.gender} · ${profile.age} 岁 · ${profile.city}</p>
+          <h3 style="margin: 0; font-size: 20px; font-weight: 800; text-align: left;">${profileView.name}</h3>
+          <p style="margin: 4px 0 0 0; font-size: 14px; text-align: left;">${profileView.gender} · ${profileView.age} 岁 · ${profileView.city}</p>
         </div>
       </div>
       <div style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 4px; text-align: left;">
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">职业身份</span>
-          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profile.job}</p>
+          <p style="margin: 2px 0 0 0; font-size: 14px; color: #333;">${profileView.job}</p>
         </div>
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">自我介绍</span>
-          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profile.bio}</p>
+          <p style="margin: 2px 0 0 0; font-size: 14px; line-height: 1.5; color: #555;">${profileView.bio}</p>
         </div>
         <div>
           <span style="font-weight: bold; color: var(--coral); font-size: 13px;">择偶要求</span>
@@ -1454,23 +1500,20 @@ function showProfileDetail(profileId) {
 async function createRequest(targetUserId, matchmakerId) {
   const user = currentUser();
   const target = state.users.find((item) => item.id === targetUserId);
-  if (!user.vip) {
-    showToast("请先扫码开通会员，再提交牵线请求");
-    const is8096 = isMiniView();
-    navigate(is8096 ? "/vip" : "/mini/vip");
-    
-    const modal = $("#profileDetailModal");
-    if (modal) {
-      modal.style.display = "none";
-      modal.classList.remove("show");
-    }
+  const selectedMatchmakerId = matchmakerId || getUserBoundMatchmakerIds(target)[0];
+  if (!selectedMatchmakerId) {
+    showToast("该会员暂未绑定红娘，无法申请牵线");
     return;
   }
+
+  const vipReady = await ensureVipForMatchmaker(selectedMatchmakerId);
+  if (!vipReady) return;
 
   const exists = state.requests.some(
     (request) =>
       request.fromUserId === user.id &&
       request.toUserId === targetUserId &&
+      request.matchmakerId === selectedMatchmakerId &&
       request.status !== "已完成",
   );
   if (exists) {
@@ -1483,7 +1526,7 @@ async function createRequest(targetUserId, matchmakerId) {
       const res = await fetch(`${API_BASE}/client/match-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ targetUserId, matchmakerId })
+        body: JSON.stringify({ targetUserId, matchmakerId: selectedMatchmakerId })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -1504,18 +1547,17 @@ async function createRequest(targetUserId, matchmakerId) {
       id: uid("r"),
       fromUserId: user.id,
       toUserId: targetUserId,
-      matchmakerId,
+      matchmakerId: selectedMatchmakerId,
       status: "待红娘联系",
       maleContacted: false,
       femaleContacted: false,
-      memberChatEnabled: true,
+      memberChatEnabled: false,
       createdAt: new Date().toISOString(),
     };
     state.requests.unshift(newRequest);
-    if (matchmakerId) {
+    if (selectedMatchmakerId) {
       createLocalThread("member_matchmaker", newRequest);
     }
-    createLocalThread("member_member", newRequest);
     saveState();
     renderAll();
     showToast(`已通知红娘为你和${target.name}牵线`);
@@ -1527,7 +1569,7 @@ async function createRequest(targetUserId, matchmakerId) {
     modal.classList.remove("show");
   }
 
-  const matchmaker = getMatchmaker(matchmakerId);
+  const matchmaker = getMatchmaker(selectedMatchmakerId);
   logEvent("user", `客户 '${user.name}' 申请认识嘉宾 '${target.name}'，已指派红娘 '${matchmaker?.name || "未知"}'`);
   showPushNotification("【新牵线意向提醒】", {
     "专属红娘": matchmaker?.name || "未分配",
@@ -1558,7 +1600,9 @@ function renderRequests() {
         const matchmaker = getMatchmaker(request.matchmakerId);
         const otherUser = request.fromUserId === user.id ? to : from;
         const unlockedWechat = request.status === "来和双方对话" ? `<div class="muted">对方微信：${otherUser?.wechat || "待同步"}</div>` : "";
-        const memberChatStatus = `<div class="muted">会员互聊：已开启</div>`;
+        const memberChatStatus = request.memberChatEnabled
+          ? `<div class="muted">会员互聊：已开启</div>`
+          : `<div class="muted">会员互聊：等待红娘开通</div>`;
         return `
           <article class="request-card">
             <span class="status-pill">${request.status}</span>
@@ -1591,7 +1635,11 @@ function renderMiniChatSections(user, requests) {
 
   const accessibleThreads = state.chatThreads.filter((thread) => threadHasParticipant(thread, "client", user.id));
   const mmThreads = accessibleThreads.filter((thread) => thread.type === "member_matchmaker" && (thread.participants || []).length === 2);
-  const memberThreads = accessibleThreads.filter((thread) => thread.type === "member_member");
+  const memberThreads = accessibleThreads.filter((thread) => {
+    if (thread.type !== "member_member") return false;
+    const req = getRequestById(thread.requestId);
+    return Boolean(req?.memberChatEnabled);
+  });
 
   if (!activeMiniChatThreadId || !accessibleThreads.some((thread) => thread.id === activeMiniChatThreadId)) {
     activeMiniChatThreadId = mmThreads[0]?.id || memberThreads[0]?.id || null;
@@ -1625,7 +1673,7 @@ function renderMiniChatSections(user, requests) {
           return `
             <div class="request-card muted">
               <strong>${otherUser?.name || "会员"}</strong>
-              <div>聊天线程生成中，请稍候刷新。</div>
+              <div>${request.memberChatEnabled ? "聊天线程生成中，请稍候刷新。" : "红娘开通后，这里会出现双方互聊入口。"}</div>
             </div>
           `;
         }
@@ -1708,9 +1756,8 @@ async function becomeVip() {
       return;
     }
   } else {
-    user.vip = true;
+    addVipMatchmaker(user, matchmaker.id);
     user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    user.referralMatchmakerId = matchmaker.id;
     state.deals.unshift({
       id: uid("d"),
       requestId: null,
@@ -1742,6 +1789,47 @@ async function becomeVip() {
     "获得分成": `¥${promoComm} (${state.splits.promo}%)`,
     "账单状态": "已结算至红娘钱包"
   });
+}
+
+async function ensureVipForMatchmaker(matchmakerId) {
+  const user = currentUser();
+  const matchmaker = getMatchmaker(matchmakerId);
+  if (!user || !matchmaker) return false;
+  if (isVipForMatchmaker(user, matchmakerId)) return true;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/client/vip/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ referralCode: matchmaker.code })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.warn("API ensure vip failed:", err);
+      showToast("开通该红娘 VIP 失败：" + err.message);
+      return false;
+    }
+  } else {
+    addVipMatchmaker(user, matchmakerId);
+    user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    state.deals.unshift({
+      id: uid("d"),
+      requestId: null,
+      amount: VIP_PRICE,
+      createdAt: new Date().toISOString().slice(0, 10),
+    });
+    saveState();
+  }
+
+  showToast(`已成为${matchmaker.name}的专属 VIP`);
+  return true;
 }
 
 function renderVipMatchmakers(filterKeyword = "") {
@@ -1840,7 +1928,6 @@ async function redeemVip() {
       promoCode.usedBy = user.id;
     }
 
-    user.vip = true;
     user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     
     if (redeemBtn) {
@@ -1852,8 +1939,10 @@ async function redeemVip() {
     if (promoCode.matchmakerId) {
       matchmaker = getMatchmaker(promoCode.matchmakerId);
       if (matchmaker) {
-        user.referralMatchmakerId = matchmaker.id;
+        addVipMatchmaker(user, matchmaker.id);
       }
+    } else {
+      user.vip = true;
     }
 
     state.deals.unshift({
@@ -2036,8 +2125,11 @@ function renderMatchmakerDesk() {
   const requests = state.requests.filter(
     (request) => request.matchmakerId === mmId,
   );
-  $("#notificationCount").textContent = `${requests.filter((item) => item.status !== "来和双方对话").length} 条待处理`;
-  $("#notificationList").innerHTML =
+  const pendingProfiles = state.users
+    .map((user) => ({ user, profile: user.profileByMatchmaker?.[mmId] }))
+    .filter((item) => item.profile?.status === "pending");
+  $("#notificationCount").textContent = `${requests.filter((item) => item.status !== "来和双方对话").length + pendingProfiles.length} 条待处理`;
+  const requestHtml =
     requests
       .map((request) => {
         const { from, to } = getRequestUsers(request);
@@ -2054,7 +2146,10 @@ function renderMatchmakerDesk() {
           request.status === "来和双方对话"
             ? `<button class="primary-button" data-talk-both="${request.id}" type="button" style="width: auto;">来和双方对话</button>`
             : "";
-        const approvedTag = `<div class="muted">会员互聊：已开启</div>`;
+        const chatToggleBtn = request.memberChatEnabled
+          ? `<button class="ghost-button" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button" style="width: auto;">关闭双方沟通</button>`
+          : `<button class="primary-button" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button" style="width: auto;">开通双方沟通</button>`;
+        const approvedTag = `<div class="muted">会员互聊：${request.memberChatEnabled ? "已开启" : "未开启"}</div>`;
         return `
           <article class="request-card">
             <span class="status-pill">${request.status}</span>
@@ -2065,12 +2160,33 @@ function renderMatchmakerDesk() {
               ${maleBtn}
               ${femaleBtn}
               ${talkBothBtn}
+              ${chatToggleBtn}
             </div>
             ${approvedTag}
           </article>
         `;
       })
-      .join("") || `<div class="request-card muted">暂无应用通知。</div>`;
+      .join("");
+  const profileReviewHtml = pendingProfiles
+    .map(({ user, profile }) => {
+      const draft = profile.draft || user;
+      return `
+        <article class="request-card">
+          <span class="status-pill">资料待审核</span>
+          <strong>${draft.name || user.name} 的资料更新</strong>
+          <div class="muted">${draft.gender || user.gender} · ${draft.age || user.age} 岁 · ${draft.city || user.city}</div>
+          <div class="muted">职业：${draft.job || "-"}</div>
+          <div class="muted">自我介绍：${draft.bio || "-"}</div>
+          <div class="muted">择偶要求：${draft.requirements || "-"}</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+            <button class="primary-button" data-profile-review="${user.id}" data-review-action="approve" type="button" style="width:auto;">审核通过</button>
+            <button class="ghost-button" data-profile-review="${user.id}" data-review-action="reject" type="button" style="width:auto;">退回修改</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  $("#notificationList").innerHTML = requestHtml + profileReviewHtml || `<div class="request-card muted">暂无应用通知。</div>`;
 
   $("#contactPanel").innerHTML =
     requests
@@ -2258,12 +2374,93 @@ async function contactRequestSide(requestId, side) {
   }
 }
 
+async function toggleMemberChat(requestId, enabled) {
+  const request = getRequestById(requestId);
+  if (!request) return;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/matchmaker/requests/${requestId}/member-chat`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ enabled })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.warn("API toggle member chat failed, fallback to local:", err);
+      showToast("操作失败：" + err.message);
+      return;
+    }
+  } else {
+    request.memberChatEnabled = enabled;
+    if (enabled && !state.chatThreads.some((thread) => thread.type === "member_member" && thread.requestId === requestId)) {
+      createLocalThread("member_member", request);
+    }
+    saveState();
+  }
+
+  renderAll();
+  showToast(enabled ? "已开通双方沟通" : "已关闭双方沟通");
+}
+
+async function reviewMatchmakerProfile(userId, action) {
+  const mm = currentMatchmaker();
+  const user = state.users.find((item) => item.id === userId);
+  if (!mm || !user) return;
+
+  if (apiAvailable) {
+    try {
+      const res = await fetch(`${API_BASE}/matchmaker/users/${userId}/profile-review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ action })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "failed");
+      }
+      const data = await res.json();
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.warn("API profile review failed, fallback to local:", err);
+      showToast("操作失败：" + err.message);
+      return;
+    }
+  } else {
+    const profile = user.profileByMatchmaker?.[mm.id];
+    if (!profile) return;
+    if (action === "approve") {
+      profile.published = profile.draft || user;
+      profile.status = "approved";
+    } else {
+      profile.status = "rejected";
+    }
+    profile.reviewedAt = new Date().toISOString();
+    profile.reviewedBy = mm.id;
+    saveState();
+  }
+
+  renderAll();
+  showToast(action === "approve" ? "资料已审核通过" : "资料已退回修改");
+}
+
 async function sendMiniChatMessage(event) {
   event.preventDefault();
   const thread = getThreadById(activeMiniChatThreadId);
   const user = currentUser();
   const input = $("#miniChatInput");
   if (!thread || !user || !input) return;
+  if (thread.type === "member_member" && !getRequestById(thread.requestId)?.memberChatEnabled) {
+    showToast("红娘暂未开通双方沟通权限");
+    return;
+  }
   const content = input.value.trim();
   if (!content) return;
 
@@ -2623,6 +2820,18 @@ async function saveProfile(event) {
   const delegatedMatchmakerIds = Array.from(delegatedMmCheckboxes).map(cb => cb.value);
   updatedData.delegatedMatchmakerIds = delegatedMatchmakerIds;
   updatedData.referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+  updatedData.syncAllMatchmakers = Boolean(form.elements.syncAllMatchmakers?.checked);
+  const previousPublishedProfile = {
+    name: user.name,
+    gender: user.gender,
+    age: user.age,
+    city: user.city,
+    job: user.job,
+    wechat: user.wechat,
+    bio: user.bio,
+    requirements: user.requirements,
+    photo: user.photo,
+  };
 
   if (apiAvailable) {
     try {
@@ -2639,7 +2848,7 @@ async function saveProfile(event) {
       state = data.state;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
-      showToast("个人资料已保存");
+      showToast("个人资料已提交红娘审核");
     } catch (err) {
       console.warn("API save profile failed, fallback to local:", err);
       showToast("操作失败：" + err.message);
@@ -2647,9 +2856,31 @@ async function saveProfile(event) {
     }
   } else {
     Object.assign(user, updatedData);
+    if (!user.profileByMatchmaker) user.profileByMatchmaker = {};
+    const ids = updatedData.syncAllMatchmakers ? getUserVipMatchmakerIds(user) : delegatedMatchmakerIds;
+    ids.forEach((matchmakerId) => {
+      const currentProfile = user.profileByMatchmaker[matchmakerId] || {};
+      user.profileByMatchmaker[matchmakerId] = {
+        ...currentProfile,
+        published: currentProfile.published || previousPublishedProfile,
+        draft: {
+          name: user.name,
+          gender: user.gender,
+          age: user.age,
+          city: user.city,
+          job: user.job,
+          wechat: user.wechat,
+          bio: user.bio,
+          requirements: user.requirements,
+          photo: user.photo,
+        },
+        status: "pending",
+        updatedAt: new Date().toISOString(),
+      };
+    });
     saveState();
     renderAll();
-    showToast("个人资料已保存");
+    showToast("个人资料已提交红娘审核");
   }
 }
 
@@ -3283,6 +3514,19 @@ function bindEvents() {
     const talkBothButton = event.target.closest("[data-talk-both]");
     if (talkBothButton) {
       openThreeWayChat(talkBothButton.dataset.talkBoth);
+      return;
+    }
+    const toggleMemberChatButton = event.target.closest("[data-toggle-member-chat]");
+    if (toggleMemberChatButton) {
+      toggleMemberChat(
+        toggleMemberChatButton.dataset.toggleMemberChat,
+        toggleMemberChatButton.dataset.chatEnabled === "true",
+      );
+      return;
+    }
+    const profileReviewButton = event.target.closest("[data-profile-review]");
+    if (profileReviewButton) {
+      reviewMatchmakerProfile(profileReviewButton.dataset.profileReview, profileReviewButton.dataset.reviewAction);
       return;
     }
   });

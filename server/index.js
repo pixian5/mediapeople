@@ -189,6 +189,9 @@ const seedState = {
 };
 
 seedState.users.forEach((u) => {
+  if (!u.vipMatchmakerIds) {
+    u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
+  }
   if (!u.delegatedMatchmakerIds) {
     u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
   }
@@ -423,7 +426,7 @@ function publicState(data) {
 }
 
 function ensureRequestDefaults(request) {
-  request.memberChatEnabled = true;
+  if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
   if (request.maleContacted === undefined) {
     request.maleContacted = request.status === "已联系双方" || request.status === "来和双方对话" || request.status === "已联系男方" || request.status === "联系男方";
   }
@@ -432,6 +435,44 @@ function ensureRequestDefaults(request) {
   }
   request.status = getRequestContactStatus(request);
   return request;
+}
+
+function ensureUserDefaults(user) {
+  if (!Array.isArray(user.vipMatchmakerIds)) {
+    user.vipMatchmakerIds = user.vip && user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
+  }
+  if (!Array.isArray(user.delegatedMatchmakerIds)) {
+    user.delegatedMatchmakerIds = user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
+  }
+  if (!user.profileByMatchmaker || typeof user.profileByMatchmaker !== "object") {
+    user.profileByMatchmaker = {};
+  }
+  user.vip = user.vip || user.vipMatchmakerIds.length > 0;
+  return user;
+}
+
+function buildMatchmakerProfilePayload(user) {
+  return {
+    name: user.name,
+    gender: user.gender,
+    age: user.age,
+    city: user.city,
+    job: user.job,
+    wechat: user.wechat,
+    bio: user.bio,
+    requirements: user.requirements,
+    photo: user.photo,
+  };
+}
+
+function upsertUserVipMatchmaker(user, matchmakerId) {
+  ensureUserDefaults(user);
+  if (!matchmakerId) return user;
+  if (!user.vipMatchmakerIds.includes(matchmakerId)) user.vipMatchmakerIds.push(matchmakerId);
+  if (!user.delegatedMatchmakerIds.includes(matchmakerId)) user.delegatedMatchmakerIds.push(matchmakerId);
+  if (!user.referralMatchmakerId) user.referralMatchmakerId = matchmakerId;
+  user.vip = true;
+  return user;
 }
 
 function getRequestContactStatus(request) {
@@ -544,7 +585,7 @@ async function readState() {
   };
 
   const allThreads = chatThreadsRes.rows.map(r => ensureThreadDefaults(r.raw));
-  const allUsers = usersRes.rows.map(r => r.raw);
+  const allUsers = usersRes.rows.map(r => ensureUserDefaults(r.raw));
   
   for (const request of requestsRes.rows.map(r => ensureRequestDefaults(r.raw))) {
     if (request.matchmakerId) {
@@ -644,13 +685,7 @@ async function readState() {
     splits: runtimeSettings.splits,
     agencies: agenciesRes.rows.map(r => r.raw),
     matchmakers: matchmakersRes.rows.map(r => r.raw),
-    users: usersRes.rows.map(r => {
-      const u = r.raw;
-      if (!u.delegatedMatchmakerIds) {
-        u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
-      }
-      return u;
-    }),
+    users: usersRes.rows.map(r => ensureUserDefaults(r.raw)),
     requests: requestsRes.rows.map(r => ensureRequestDefaults(r.raw)),
     chatThreads: allThreads,
     chatMessages: chatMessagesRes.rows.map(r => r.raw),
@@ -1078,8 +1113,10 @@ app.post("/api/auth/client/register", async (request, response) => {
     realName: null,
     idCard: null,
     vip: false,
+    vipMatchmakerIds: [],
     referralMatchmakerId,
     delegatedMatchmakerIds,
+    profileByMatchmaker: {},
     bio: String(input.bio || "").trim(),
     requirements: String(input.requirements || "").trim(),
     photo: input.photo || null,
@@ -1162,12 +1199,13 @@ app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
 // 1. 客户：修改个人资料
 app.patch("/api/client/profile", requireAuth(["client"]), async (request, response) => {
   const userId = request.user.sub;
-  const { name, gender, age, city, job, wechat, bio, requirements, delegatedMatchmakerIds } = request.body || {};
+  const { name, gender, age, city, job, wechat, bio, requirements, delegatedMatchmakerIds, syncAllMatchmakers } = request.body || {};
   
   const userRes = await pool.query("select raw from users where id = $1", [userId]);
   if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
   
-  const user = userRes.rows[0].raw;
+  const user = ensureUserDefaults(userRes.rows[0].raw);
+  const previousPublishedProfile = buildMatchmakerProfilePayload(user);
   user.name = name !== undefined ? name.trim() : user.name;
   user.gender = gender !== undefined ? gender : user.gender;
   user.age = Number.isFinite(Number(age)) ? Number(age) : user.age;
@@ -1177,15 +1215,54 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   user.bio = bio !== undefined ? bio.trim() : user.bio;
   user.requirements = requirements !== undefined ? requirements.trim() : user.requirements;
   
-  if (Array.isArray(delegatedMatchmakerIds)) {
-    user.delegatedMatchmakerIds = delegatedMatchmakerIds;
-    user.referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+  const selectedMatchmakerIds = syncAllMatchmakers
+    ? user.vipMatchmakerIds
+    : (Array.isArray(delegatedMatchmakerIds) ? delegatedMatchmakerIds : user.delegatedMatchmakerIds);
+  user.delegatedMatchmakerIds = selectedMatchmakerIds.filter(Boolean);
+  user.referralMatchmakerId = user.delegatedMatchmakerIds[0] || user.referralMatchmakerId || null;
+
+  const profilePayload = buildMatchmakerProfilePayload(user);
+  for (const matchmakerId of user.delegatedMatchmakerIds) {
+    const currentProfile = user.profileByMatchmaker[matchmakerId] || {};
+    user.profileByMatchmaker[matchmakerId] = {
+      ...currentProfile,
+      published: currentProfile.published || previousPublishedProfile,
+      draft: profilePayload,
+      status: "pending",
+      updatedAt: new Date().toISOString(),
+    };
   }
   
   await pool.query(
     `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, referral_matchmaker_id = $7, raw = $8, updated_at = now() where id = $9`,
     [user.name, user.gender, user.age, user.city, user.job, user.wechat, user.referralMatchmakerId || null, JSON.stringify(user), userId]
   );
+  response.json({ user, state: publicState(await readState()) });
+});
+
+app.patch("/api/matchmaker/users/:id/profile-review", requireAuth(["matchmaker"]), async (request, response) => {
+  const userId = request.params.id;
+  const matchmakerId = request.user.sub;
+  const action = request.body?.action;
+  if (!["approve", "reject"].includes(action)) return response.status(400).json({ error: "invalid_action" });
+
+  const userRes = await pool.query("select raw from users where id = $1", [userId]);
+  if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
+  const user = ensureUserDefaults(userRes.rows[0].raw);
+  const profile = user.profileByMatchmaker[matchmakerId];
+  if (!profile) return response.status(404).json({ error: "profile_not_found" });
+
+  if (action === "approve") {
+    profile.published = profile.draft || buildMatchmakerProfilePayload(user);
+    profile.status = "approved";
+  } else {
+    profile.status = "rejected";
+  }
+  profile.reviewedAt = new Date().toISOString();
+  profile.reviewedBy = matchmakerId;
+  user.profileByMatchmaker[matchmakerId] = profile;
+
+  await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(user), userId]);
   response.json({ user, state: publicState(await readState()) });
 });
 
@@ -1227,7 +1304,7 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
       await client.query("rollback");
       return response.status(404).json({ error: "user_not_found" });
     }
-    const user = userRes.rows[0].raw;
+    const user = ensureUserDefaults(userRes.rows[0].raw);
 
     let matchmakerId = null;
 
@@ -1271,9 +1348,7 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
     // 升级 VIP
     user.vip = true;
     user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    if (matchmakerId) {
-      user.referralMatchmakerId = matchmakerId;
-    }
+    if (matchmakerId) upsertUserVipMatchmaker(user, matchmakerId);
     await client.query(
       "update users set vip = true, referral_matchmaker_id = $1, raw = $2, updated_at = now() where id = $3",
       [user.referralMatchmakerId, JSON.stringify(user), userId]
@@ -1311,23 +1386,26 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
 
   const fromUserRes = await pool.query("select raw from users where id = $1", [userId]);
   if (fromUserRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
-  const fromUser = fromUserRes.rows[0].raw;
-  if (!fromUser.vip) return response.status(403).json({ error: "vip_required" });
+  const fromUser = ensureUserDefaults(fromUserRes.rows[0].raw);
 
   const toUserRes = await pool.query("select raw from users where id = $1", [targetUserId]);
   if (toUserRes.rows.length === 0) return response.status(404).json({ error: "target_not_found" });
-  const toUser = toUserRes.rows[0].raw;
-
-  const duplicateRes = await pool.query(
-    "select 1 from match_requests where from_user_id = $1 and to_user_id = $2 and status != '已完成'",
-    [userId, targetUserId]
-  );
-  if (duplicateRes.rows.length > 0) return response.status(409).json({ error: "request_pending" });
+  const toUser = ensureUserDefaults(toUserRes.rows[0].raw);
 
   const reqId = `r${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
   if (!matchmakerId) {
-    matchmakerId = fromUser.referralMatchmakerId || toUser.referralMatchmakerId || null;
+    matchmakerId = toUser.delegatedMatchmakerIds?.[0] || toUser.referralMatchmakerId || fromUser.referralMatchmakerId || null;
   }
+  if (!matchmakerId) return response.status(400).json({ error: "matchmaker_required" });
+  if (!fromUser.vipMatchmakerIds.includes(matchmakerId)) return response.status(403).json({ error: "matchmaker_vip_required" });
+  if (!toUser.delegatedMatchmakerIds.includes(matchmakerId)) return response.status(400).json({ error: "target_not_bound_to_matchmaker" });
+
+  const duplicateRes = await pool.query(
+    "select 1 from match_requests where from_user_id = $1 and to_user_id = $2 and matchmaker_id = $3 and status != '已完成'",
+    [userId, targetUserId, matchmakerId]
+  );
+  if (duplicateRes.rows.length > 0) return response.status(409).json({ error: "request_pending" });
+
   const matchReq = {
     id: reqId,
     fromUserId: userId,
@@ -1336,7 +1414,7 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
     status: "待红娘联系",
     maleContacted: false,
     femaleContacted: false,
-    memberChatEnabled: true,
+    memberChatEnabled: false,
     createdAt: new Date().toISOString()
   };
 
@@ -1354,13 +1432,6 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
       [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)]
     );
   }
-
-  const memberThread = buildMemberMemberThread(matchReq);
-  await pool.query(
-    `insert into chat_threads (id, type, request_id, status, participants, raw)
-     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-    [memberThread.id, memberThread.type, memberThread.requestId, memberThread.status, JSON.stringify(memberThread.participants), JSON.stringify(memberThread)]
-  );
 
   response.status(201).json({ request: matchReq, state: publicState(await readState()) });
 });
@@ -1427,6 +1498,40 @@ app.patch("/api/matchmaker/requests/:id/approve-member-chat", requireAuth(["matc
   response.json({ request: req, state: publicState(await readState()) });
 });
 
+app.patch("/api/matchmaker/requests/:id/member-chat", requireAuth(["matchmaker"]), async (request, response) => {
+  const requestId = request.params.id;
+  const matchmakerId = request.user.sub;
+  const enabled = Boolean(request.body?.enabled);
+
+  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
+  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
+  const req = ensureRequestDefaults(reqRes.rows[0].raw);
+  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
+
+  req.memberChatEnabled = enabled;
+  await pool.query(
+    "update match_requests set raw = $1, updated_at = now() where id = $2",
+    [JSON.stringify(req), requestId]
+  );
+
+  if (enabled) {
+    const threadRes = await pool.query(
+      "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
+      [requestId]
+    );
+    if (threadRes.rows.length === 0) {
+      const memberThread = buildMemberMemberThread(req);
+      await pool.query(
+        `insert into chat_threads (id, type, request_id, status, participants, raw)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+        [memberThread.id, memberThread.type, memberThread.requestId, memberThread.status, JSON.stringify(memberThread.participants), JSON.stringify(memberThread)]
+      );
+    }
+  }
+
+  response.json({ request: req, state: publicState(await readState()) });
+});
+
 app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker", "admin"]), async (request, response) => {
   const threadId = request.params.id;
   const content = String(request.body?.content || "").trim();
@@ -1437,6 +1542,11 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker", 
   const thread = ensureThreadDefaults(threadRes.rows[0].raw);
   if (!canAccessThread(thread, request.user)) return response.status(403).json({ error: "forbidden" });
   if (thread.status !== "active") return response.status(400).json({ error: "thread_inactive" });
+  if (thread.type === "member_member") {
+    const reqRes = await pool.query("select raw from match_requests where id = $1", [thread.requestId]);
+    const req = reqRes.rows[0] ? ensureRequestDefaults(reqRes.rows[0].raw) : null;
+    if (!req?.memberChatEnabled) return response.status(403).json({ error: "member_chat_disabled" });
+  }
 
   const message = {
     id: `cm${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
