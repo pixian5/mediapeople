@@ -230,20 +230,6 @@ pool.query = async (...args) => {
   return result;
 };
 
-const rawPoolConnect = pool.connect.bind(pool);
-pool.connect = async (...args) => {
-  const client = await rawPoolConnect(...args);
-  const rawClientQuery = client.query.bind(client);
-  client.query = async (...queryArgs) => {
-    const result = await rawClientQuery(...queryArgs);
-    if (shouldInvalidateStateCache(queryArgs[0])) {
-      invalidateStateCache();
-    }
-    return result;
-  };
-  return client;
-};
-
 async function initDatabase() {
   await pool.query(`
     create table if not exists app_state (
@@ -1423,6 +1409,7 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
     );
 
     await client.query("commit");
+    invalidateStateCache();
     response.json({ user, state: publicState(await readState()) });
   } catch (err) {
     await client.query("rollback");
