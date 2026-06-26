@@ -1,6 +1,13 @@
-2026-06-25 | Claude Fable 5
+2026-06-27 | Codex 修订
 
 # 缘定传媒人 — API 接口文档
+
+## 2026-06-27 当前修订摘要
+
+本文件已按当前接口修订：会员聊天线程接口会同时解析 users 与 matchmakers；红娘通过 /api/matchmaker/requests/:id/contacted 联系男方/女方，通过 /api/matchmaker/requests/:id/member-chat 开关会员互聊。
+
+如本文下方旧段落与本摘要或 `说明/10-操作手册.md` 冲突，以 `说明/10-操作手册.md` 和当前线上实测流程为准。
+
 
 ## 基础信息
 
@@ -525,7 +532,7 @@ PATCH /api/matchmaker/requests/:id/contacted
 ### 开启会员互聊
 
 ```
-PATCH /api/matchmaker/requests/:id/approve-member-chat
+PATCH /api/matchmaker/requests/:id/member-chat
 ```
 
 **需要 `matchmaker` 角色认证**。
@@ -822,7 +829,7 @@ curl -sS http://uk.sbbz.tech:8098/api/matchmaker/requests/请求ID/contacted \
   -d '{"side":"female"}'
 
 # 4. 开启会员互聊
-curl -sS http://uk.sbbz.tech:8098/api/matchmaker/requests/请求ID/approve-member-chat \
+curl -sS http://uk.sbbz.tech:8098/api/matchmaker/requests/请求ID/member-chat \
   -X PATCH \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $MM_TOKEN"
@@ -902,7 +909,7 @@ sequenceDiagram
     API-->>MM: { request, state }
 
     Note over MM,DB: 5. 开启会员互聊
-    MM->>API: PATCH /api/matchmaker/requests/:id/approve-member-chat
+    MM->>API: PATCH /api/matchmaker/requests/:id/member-chat
     API->>DB: 创建 member_member 聊天线程
     API->>DB: memberChatEnabled = true
     API-->>MM: { request, state }
@@ -964,7 +971,7 @@ graph TD
 
     subgraph 红娘业务层
         M1[PATCH /api/matchmaker/requests/:id/contacted]
-        M2[PATCH /api/matchmaker/requests/:id/approve-member-chat]
+        M2[PATCH /api/matchmaker/requests/:id/member-chat]
         M3[PATCH /api/matchmaker/requests/:id/member-chat]
         M4[PATCH /api/matchmaker/users/:id/profile-review]
     end
