@@ -2323,7 +2323,7 @@ async function contactRequestSide(requestId, side) {
       const data = await res.json();
       state = data.state;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      showToast(`已标记联系${side === "male" ? "男方" : "女方"}，正在打开聊天…`);
+      showToast(`已标记联系${side === "male" ? "男方" : "女方"}`);
     } catch (err) {
       console.warn("API complete request failed, fallback to local:", err);
       showToast("操作失败：" + err.message);
@@ -2334,7 +2334,7 @@ async function contactRequestSide(requestId, side) {
     if (side === "female") request.femaleContacted = true;
     request.status = getRequestContactStatus(request);
     saveState();
-    showToast(`已标记联系${side === "male" ? "男方" : "女方"}，正在打开聊天…`);
+    showToast(`已标记联系${side === "male" ? "男方" : "女方"}`);
   }
 
   const updatedRequest = getRequestById(requestId) || request;
@@ -2342,26 +2342,6 @@ async function contactRequestSide(requestId, side) {
   const { maleUser, femaleUser } = getGenderParticipants(updatedRequest);
   const matchmaker = getMatchmaker(updatedRequest.matchmakerId);
   const contactedUser = side === "male" ? maleUser : femaleUser;
-
-  // 自动跳转到该方会员的聊天窗口
-  const contactedUserId = contactedUser?.id;
-  if (contactedUserId) {
-    let thread = state.chatThreads.find(
-      (t) => t.type === "member_matchmaker" && t.requestId === requestId &&
-        (t.participants || []).length === 2 &&
-        (t.participants || []).some((p) => p.role === "client" && p.id === contactedUserId)
-    );
-    if (!thread) {
-      thread = state.chatThreads.find(
-        (t) => t.type === "member_matchmaker" && t.requestId === requestId &&
-          (t.participants || []).some((p) => p.role === "client" && p.id === contactedUserId)
-      );
-    }
-    if (thread) {
-      activeMatchmakerChatThreadId = thread.id;
-      matchmakerChatModalOpen = true;
-    }
-  }
 
   renderAll();
 
