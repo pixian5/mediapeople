@@ -4,6 +4,7 @@
   "description": "这是一个单身交友业务原型，包含客户小程序端、红娘工作台、管理后台、Node/Express API、PostgreSQL 数据库和 Docker/Nginx 部署配置。",
   "main": "app.js",
   "scripts": {
+    "render:static": "node ./scripts/render-static.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

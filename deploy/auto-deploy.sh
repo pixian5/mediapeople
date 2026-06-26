@@ -22,6 +22,36 @@ git pull origin master 2>&1 | tee -a "$LOG_FILE"
 # 检查是否有 server/ 变更（需要重新构建 api 容器）
 CHANGED_FILES=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null || echo "")
 
+NODE_BIN="${NODE_BIN:-}"
+if [ -z "$NODE_BIN" ]; then
+  if command -v node >/dev/null 2>&1; then
+    NODE_BIN="$(command -v node)"
+  elif command -v nodejs >/dev/null 2>&1; then
+    NODE_BIN="$(command -v nodejs)"
+  else
+    NODE_BIN="$(find "$HOME/.nvm/versions/node" -maxdepth 3 -type f -name node 2>/dev/null | sort | tail -n 1)"
+  fi
+fi
+
+if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+  log "ERROR: Node.js 未找到，无法生成自动版本号静态页面"
+  exit 1
+fi
+
+log "正在生成带自动版本号的静态页面..."
+"$NODE_BIN" "$REPO_DIR/scripts/render-static.mjs" 2>&1 | tee -a "$LOG_FILE"
+
+if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
+  log "检测到 uniapp/ 变更，构建 H5 版本..."
+  (
+    cd "$REPO_DIR/uniapp"
+    npm install 2>&1 | tee -a "$LOG_FILE"
+    npm run build:h5 2>&1 | tee -a "$LOG_FILE"
+  )
+else
+  log "无 uniapp/ 变更，跳过 H5 构建"
+fi
+
 if echo "$CHANGED_FILES" | grep -q '^server/'; then
   log "检测到 server/ 变更，重新构建 api 容器..."
   docker compose -f "$REPO_DIR/compose.yml" build api 2>&1 | tee -a "$LOG_FILE"
