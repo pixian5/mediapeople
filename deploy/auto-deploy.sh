@@ -54,7 +54,7 @@ if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
   if [ -n "$NPM_BIN" ] && [ -x "$NPM_BIN" ]; then
     (
       cd "$REPO_DIR/uniapp"
-      "$NPM_BIN" install 2>&1 | tee -a "$LOG_FILE"
+      "$NPM_BIN" install --legacy-peer-deps 2>&1 | tee -a "$LOG_FILE"
       "$NPM_BIN" run build:h5 2>&1 | tee -a "$LOG_FILE"
     )
   elif command -v docker >/dev/null 2>&1; then
@@ -63,7 +63,7 @@ if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
       -v "$REPO_DIR/uniapp:/app" \
       -w /app \
       node:22-alpine \
-      sh -lc 'npm install && npm run build:h5' 2>&1 | tee -a "$LOG_FILE"
+      sh -lc 'npm install --legacy-peer-deps && npm run build:h5' 2>&1 | tee -a "$LOG_FILE"
   else
     log "ERROR: npm 和 Docker 都不可用，无法构建 uniapp H5"
     exit 1
