@@ -14,7 +14,7 @@ function getBaseUrl() {
 
   // #ifdef MP-WEIXIN
   // 小程序环境使用完整 HTTPS 域名
-  return "https://mp.sbbz.tech:9446/api";
+  return "https://uk.sbbz.tech:9446/api";
   // #endif
 
   // #ifndef H5 || MP-WEIXIN
