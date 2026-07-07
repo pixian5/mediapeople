@@ -2139,11 +2139,11 @@ function renderMatchmakerDesk() {
         const { maleUser, femaleUser } = getGenderParticipants(request);
         const maleBtn =
           maleUser
-            ? `<button class="secondary-button${request.maleContacted ? " contacted" : ""}" data-contact-request="${request.id}" data-contact-side="male" type="button">${request.maleContacted ? "✓ 联系男方" : "联系男方"}</button>`
+            ? `<button class="secondary-button" data-open-contact-chat="${request.id}" data-contact-side="male" type="button">联系男方</button>`
             : "";
         const femaleBtn =
           femaleUser
-            ? `<button class="secondary-button${request.femaleContacted ? " contacted" : ""}" data-contact-request="${request.id}" data-contact-side="female" type="button">${request.femaleContacted ? "✓ 联系女方" : "联系女方"}</button>`
+            ? `<button class="secondary-button" data-open-contact-chat="${request.id}" data-contact-side="female" type="button">联系女方</button>`
             : "";
         const talkBothBtn =
           request.status === "来和双方对话"
@@ -2158,7 +2158,7 @@ function renderMatchmakerDesk() {
             <span class="status-pill">${request.status}</span>
             <strong>${from.name} 申请认识 ${to.name}</strong>
             <div class="muted">${new Date(request.createdAt).toLocaleString("zh-CN")}</div>
-            <div class="muted">${maleUser?.name || "男方"}：${request.maleContacted ? "已联系" : "待联系"} ｜ ${femaleUser?.name || "女方"}：${request.femaleContacted ? "已联系" : "待联系"}</div>
+            <div class="muted">点击联系男方/联系女方，进入对应会员的一对一聊天。</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
               ${maleBtn}
               ${femaleBtn}
@@ -2302,6 +2302,22 @@ function openThreeWayChat(requestId) {
     showToast("未找到会话，请刷新页面");
   }
   renderAll();
+}
+
+function openRequestSideChat(requestId, side) {
+  const request = getRequestById(requestId);
+  if (!request || !["male", "female"].includes(side)) return;
+  const { maleUser, femaleUser } = getGenderParticipants(request);
+  const targetUser = side === "male" ? maleUser : femaleUser;
+  const thread = targetUser ? getMatchmakerThreadForRequest(requestId, targetUser.id) : null;
+  if (!thread) {
+    showToast("未找到该会员的一对一聊天，请刷新页面");
+    return;
+  }
+  activeMatchmakerChatThreadId = thread.id;
+  matchmakerChatModalOpen = true;
+  renderAll();
+  showToast(`正在和${targetUser.name || "会员"}对话`);
 }
 
 async function contactRequestSide(requestId, side) {
@@ -3488,9 +3504,9 @@ function bindEvents() {
   });
   
   safeBind("#notificationList", "click", (event) => {
-    const button = event.target.closest("[data-contact-request]");
+    const button = event.target.closest("[data-open-contact-chat]");
     if (button) {
-      contactRequestSide(button.dataset.contactRequest, button.dataset.contactSide);
+      openRequestSideChat(button.dataset.openContactChat, button.dataset.contactSide);
       return;
     }
     const talkBothButton = event.target.closest("[data-talk-both]");
