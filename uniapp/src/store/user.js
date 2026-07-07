@@ -85,6 +85,7 @@ export const useUserStore = defineStore("user", {
       try {
         const res = await getMeApi();
         const user = res.data?.user || res.data || res;
+        this.userId = user.id || this.userId;
         this.name = user.name || this.name;
         this.gender = user.gender || this.gender;
         this.age = user.age || this.age;

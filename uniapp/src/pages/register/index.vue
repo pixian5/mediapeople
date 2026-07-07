@@ -103,7 +103,7 @@ const handleRegister = async () => {
     // 自动登录
     const loginRes = await loginApi({ account: form.account, password: form.password });
     const token = loginRes.data?.token || loginRes.token;
-    const user = loginRes.data?.user || { id: loginRes.data?.userId || loginRes.userId };
+    const user = loginRes.data?.user || loginRes.user || { id: loginRes.data?.userId || loginRes.userId };
     if (token) {
       userStore.setLogin({ token, user });
       setTimeout(() => {

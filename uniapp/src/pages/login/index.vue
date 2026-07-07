@@ -46,7 +46,7 @@ const handleLogin = async () => {
   try {
     const res = await loginApi(form);
     const token = res.data?.token || res.token;
-    const user = res.data?.user || { id: res.data?.userId || res.userId };
+    const user = res.data?.user || res.user || { id: res.data?.userId || res.userId };
     if (token) {
       userStore.setLogin({ token, user });
       uni.showToast({ title: '登录成功', icon: 'success' });
