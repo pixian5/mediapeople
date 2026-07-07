@@ -8,18 +8,23 @@ node -e '
 const fs = require("fs");
 const files = ["admin.html", "index.html", "matchmaker.html", "mini.html", "readme.md"];
 const content = fs.readFileSync("admin.html", "utf8");
-const match = content.match(/app\.js\?v=(\d+\.\d+\.\d+)/);
+const match = content.match(/app\.js\?v=([^"'\s&]+)/);
 if (match) {
   const currentVersion = match[1];
-  const parts = currentVersion.split(".");
-  parts[parts.length - 1] = parseInt(parts[parts.length - 1], 10) + 1;
-  const newVersion = parts.join(".");
+  let newVersion;
+  if (/^\d+\.\d+\.\d+$/.test(currentVersion)) {
+    const parts = currentVersion.split(".");
+    parts[parts.length - 1] = parseInt(parts[parts.length - 1], 10) + 1;
+    newVersion = parts.join(".");
+  } else {
+    newVersion = Date.now().toString(36);
+  }
   console.log("正在将版本号从 " + currentVersion + " 升级至 " + newVersion);
   for (const file of files) {
     if (fs.existsSync(file)) {
       let fileContent = fs.readFileSync(file, "utf8");
-      fileContent = fileContent.replace(/(app\.js\?v=)\d+\.\d+\.\d+/g, "$1" + newVersion);
-      fileContent = fileContent.replace(/(styles\.css\?v=)\d+\.\d+\.\d+/g, "$1" + newVersion);
+      fileContent = fileContent.replace(/(app\.js\?v=)[^"'\s&]+/g, "$1" + newVersion);
+      fileContent = fileContent.replace(/(styles\.css\?v=)[^"'\s&]+/g, "$1" + newVersion);
       fs.writeFileSync(file, fileContent, "utf8");
     }
   }
