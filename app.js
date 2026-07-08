@@ -2226,7 +2226,7 @@ function renderMatchmakerDesk() {
             ? `<button class="secondary-button" data-open-contact-chat="${request.id}" data-contact-side="female" type="button">联系女方</button>`
             : "";
         const talkBothBtn =
-          request.status === "来和双方对话"
+          getMatchmakerGroupThreadForRequest(request.id)
             ? `<button class="primary-button" data-talk-both="${request.id}" type="button" style="width: auto;">来和双方对话</button>`
             : "";
         const memberChatEnabled = Boolean(request.memberChatEnabled);
