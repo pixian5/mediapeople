@@ -1170,7 +1170,10 @@ app.post("/api/auth/client/register", async (request, response) => {
     return;
   }
 
-  const delegatedMatchmakerIds = Array.isArray(input.delegatedMatchmakerIds) ? input.delegatedMatchmakerIds : [];
+  const allMatchmakerIds = (state.matchmakers || []).map((matchmaker) => matchmaker.id).filter(Boolean);
+  const delegatedMatchmakerIds = Array.isArray(input.delegatedMatchmakerIds) && input.delegatedMatchmakerIds.length
+    ? input.delegatedMatchmakerIds
+    : allMatchmakerIds;
   const referralMatchmakerId = delegatedMatchmakerIds[0] || null;
 
   const user = {
@@ -1254,7 +1257,7 @@ app.get("/api/state", async (_request, response) => {
   response.json(publicState(await readState()));
 });
 
-app.put("/api/state", requireAuth(["admin", "client", "matchmaker"]), async (request, response) => {
+app.put("/api/state", requireAuth(["admin"]), async (request, response) => {
   const error = validateState(request.body);
   if (error) {
     response.status(400).json({ error });
@@ -1276,7 +1279,7 @@ app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
 // 1. 客户：修改个人资料
 app.patch("/api/client/profile", requireAuth(["client"]), async (request, response) => {
   const userId = request.user.sub;
-  const { name, gender, age, city, job, wechat, bio, requirements, delegatedMatchmakerIds, syncAllMatchmakers } = request.body || {};
+  const { name, gender, age, city, job, wechat, bio, requirements, photo, avatar, delegatedMatchmakerIds, syncAllMatchmakers } = request.body || {};
   
   const userRes = await pool.query("select raw from users where id = $1", [userId]);
   if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
@@ -1291,6 +1294,7 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   user.wechat = wechat !== undefined ? wechat.trim() : user.wechat;
   user.bio = bio !== undefined ? bio.trim() : user.bio;
   user.requirements = requirements !== undefined ? requirements.trim() : user.requirements;
+  user.photo = photo !== undefined ? String(photo).trim() : avatar !== undefined ? String(avatar).trim() : user.photo;
   
   const selectedMatchmakerIds = syncAllMatchmakers
     ? user.vipMatchmakerIds
@@ -1843,12 +1847,19 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
       [...params, pageSize, offset],
     );
 
+    const matchmakersRes = await pool.query("select raw from matchmakers");
+    const matchmakerMap = new Map(matchmakersRes.rows.map((row) => [row.raw.id, row.raw]));
+
     // 处理返回数据：排除敏感字段，非 VIP 不返回 wechat
     const list = listRes.rows.map((row) => {
       const { passwordHash, idCard, ...userInfo } = row.raw;
       if (!isVip) {
         delete userInfo.wechat;
       }
+      userInfo.delegatedMatchmakers = (userInfo.delegatedMatchmakerIds || [])
+        .map((id) => matchmakerMap.get(id))
+        .filter(Boolean)
+        .map(({ passwordHash: _passwordHash, ...matchmaker }) => matchmaker);
       return userInfo;
     });
 
@@ -1888,6 +1899,12 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
     if (!isVip) {
       delete userInfo.wechat;
     }
+    const matchmakersRes = await pool.query("select raw from matchmakers");
+    const matchmakerMap = new Map(matchmakersRes.rows.map((row) => [row.raw.id, row.raw]));
+    userInfo.delegatedMatchmakers = (userInfo.delegatedMatchmakerIds || [])
+      .map((id) => matchmakerMap.get(id))
+      .filter(Boolean)
+      .map(({ passwordHash: _passwordHash, ...matchmaker }) => matchmaker);
 
     response.json({ code: 0, data: { user: userInfo }, message: "ok" });
   } catch (err) {

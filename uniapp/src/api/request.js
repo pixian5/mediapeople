@@ -76,7 +76,7 @@ export function request(options = {}) {
         }
 
         if (statusCode >= 400) {
-          const msg = resData?.message || `请求失败 (${statusCode})`;
+          const msg = resData?.message || resData?.error || `请求失败 (${statusCode})`;
           uni.showToast({ title: msg, icon: "none" });
           reject(new Error(msg));
           return;

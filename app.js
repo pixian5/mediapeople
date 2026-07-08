@@ -479,6 +479,7 @@ async function loadRemoteState() {
 }
 
 async function syncRemoteState({ keepalive = false, notify = true } = {}) {
+  if (session.role !== "admin") return;
   try {
     const response = await fetch(`${API_BASE}/state`, {
       method: "PUT",
@@ -501,7 +502,7 @@ async function syncRemoteState({ keepalive = false, notify = true } = {}) {
 async function resetState() {
   if (apiAvailable) {
     try {
-      const response = await fetch(`${API_BASE}/reset`, { method: "POST" });
+      const response = await fetch(`${API_BASE}/reset`, { method: "POST", headers: authHeaders() });
       if (!response.ok) {
         throw new Error(`Failed to reset remote state: ${response.status}`);
       }
@@ -1620,6 +1621,7 @@ async function createRequest(targetUserId, matchmakerId) {
     state.requests.unshift(newRequest);
     if (selectedMatchmakerId) {
       createLocalThread("member_matchmaker", newRequest);
+      createLocalThread("matchmaker_group", newRequest);
     }
     saveState();
     renderAll();
@@ -3667,10 +3669,8 @@ function bindEvents() {
   safeBind("#matchmakerChatForm", "submit", sendMatchmakerChatMessage);
 
   safeBind("#matchmakerChatPanel", "click", (event) => {
-    console.log("Chat panel clicked, target ID:", event.target.id, "class:", event.target.className);
     const closeBtn = event.target.closest("#closeMatchmakerChatModalBtn");
     if (event.target === event.currentTarget || closeBtn) {
-      console.log("Closing matchmaker chat panel modal...");
       matchmakerChatModalOpen = false;
       activeMatchmakerChatThreadId = null;
       renderAll();
@@ -3974,7 +3974,7 @@ bindEvents();
 initApp();
 
 window.addEventListener("pagehide", () => {
-  if (apiAvailable) {
+  if (apiAvailable && session.role === "admin") {
     syncRemoteState({ keepalive: true, notify: false });
   }
 });

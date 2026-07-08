@@ -32,6 +32,17 @@
       <text class="section-content" v-if="profile.wechat">{{ profile.wechat }}</text>
       <text class="section-content lock-text" v-else>VIP会员可见对方微信号</text>
     </view>
+
+    <view class="info-card">
+      <view class="section-title">选择牵线红娘</view>
+      <picker v-if="boundMatchmakers.length" mode="selector" :range="matchmakerNames" :value="selectedMatchmakerIndex" @change="handleMatchmakerChange">
+        <view class="picker-field">{{ selectedMatchmakerLabel }}</view>
+      </picker>
+      <text v-else class="section-content lock-text">该会员暂未绑定红娘，无法申请牵线</text>
+      <text v-if="selectedMatchmaker && !isVipForSelectedMatchmaker" class="vip-hint">
+        申请前会先开通 {{ selectedMatchmaker.name }} 的专属 VIP
+      </text>
+    </view>
     
     <view class="bottom-action safe-area-bottom">
       <button class="btn-primary" @click="handleMatchRequest" :class="{ disabled: requesting }">
@@ -45,15 +56,25 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
-import { getProfileDetailApi, createMatchRequestApi } from '@/api/client';
+import { getProfileDetailApi, createMatchRequestApi, redeemVipApi } from '@/api/client';
 import { useUserStore } from '@/store/user';
 
 const userStore = useUserStore();
 const profile = ref(null);
 const loading = ref(true);
 const requesting = ref(false);
+const selectedMatchmakerIndex = ref(0);
+
+const boundMatchmakers = computed(() => profile.value?.delegatedMatchmakers || []);
+const matchmakerNames = computed(() => boundMatchmakers.value.map((item) => `${item.name} (${item.code})`));
+const selectedMatchmaker = computed(() => boundMatchmakers.value[selectedMatchmakerIndex.value] || null);
+const selectedMatchmakerLabel = computed(() => selectedMatchmaker.value ? `${selectedMatchmaker.value.name} (${selectedMatchmaker.value.code})` : '请选择红娘');
+const isVipForSelectedMatchmaker = computed(() => {
+  const vipIds = userStore.profile?.vipMatchmakerIds || [];
+  return selectedMatchmaker.value ? vipIds.includes(selectedMatchmaker.value.id) : false;
+});
 
 onLoad((options) => {
   if (options.id) {
@@ -65,6 +86,7 @@ const loadProfile = async (id) => {
   try {
     const res = await getProfileDetailApi(id);
     profile.value = res.data?.user || res.data || res;
+    selectedMatchmakerIndex.value = 0;
   } catch (error) {
     // handled by interceptor
   } finally {
@@ -72,42 +94,66 @@ const loadProfile = async (id) => {
   }
 };
 
+const handleMatchmakerChange = (event) => {
+  selectedMatchmakerIndex.value = Number(event.detail.value || 0);
+};
+
 const handleMatchRequest = async () => {
   if (!userStore.isLoggedIn) {
     uni.navigateTo({ url: '/pages/login/index' });
     return;
   }
-  if (!userStore.vipActive) {
+  if (!userStore.profile) {
+    await userStore.fetchProfile();
+  }
+  if (!selectedMatchmaker.value) {
+    uni.showToast({ title: '该会员暂未绑定红娘', icon: 'none' });
+    return;
+  }
+
+  if (!isVipForSelectedMatchmaker.value) {
     uni.showModal({
       title: '提示',
-      content: '申请牵线需要VIP会员身份',
-      confirmText: '开通VIP',
-      success: (res) => {
+      content: `申请牵线需要先成为${selectedMatchmaker.value.name}的专属VIP`,
+      confirmText: '开通并申请',
+      success: async (res) => {
         if (res.confirm) {
-          uni.navigateTo({ url: '/pages/vip/index' });
+          await submitMatchRequest(true);
         }
       }
     });
     return;
   }
-  
+
   uni.showModal({
     title: '确认申请',
-    content: `确定要向${profile.value.name}发起牵线申请吗？`,
+    content: `确定要请${selectedMatchmaker.value.name}为你和${profile.value.name}牵线吗？`,
     success: async (res) => {
       if (res.confirm) {
-        requesting.value = true;
-        try {
-          await createMatchRequestApi({ targetUserId: profile.value.id });
-          uni.showToast({ title: '申请成功', icon: 'success' });
-        } catch (error) {
-          // handled
-        } finally {
-          requesting.value = false;
-        }
+        await submitMatchRequest(false);
       }
     }
   });
+};
+
+const submitMatchRequest = async (needRedeemVip) => {
+  if (!selectedMatchmaker.value || requesting.value) return;
+  requesting.value = true;
+  try {
+    if (needRedeemVip) {
+      await redeemVipApi({ referralCode: selectedMatchmaker.value.code });
+      await userStore.fetchProfile();
+    }
+    await createMatchRequestApi({
+      targetUserId: profile.value.id,
+      matchmakerId: selectedMatchmaker.value.id
+    });
+    uni.showToast({ title: '申请成功', icon: 'success' });
+  } catch (error) {
+    // handled by request interceptor
+  } finally {
+    requesting.value = false;
+  }
 };
 </script>
 
@@ -194,6 +240,21 @@ const handleMatchRequest = async () => {
     &.lock-text {
       color: $color-gold;
     }
+  }
+
+  .picker-field {
+    padding: 20rpx 24rpx;
+    border-radius: $radius-sm;
+    background: $color-bg;
+    font-size: $font-base;
+    color: $color-ink;
+  }
+
+  .vip-hint {
+    display: block;
+    margin-top: $spacing-sm;
+    font-size: $font-sm;
+    color: $color-gold;
   }
 }
 
