@@ -83,7 +83,10 @@ deploy/nginx.conf               HTTP Nginx 配置
 deploy/nginx-ssl.conf           HTTPS Nginx 配置
 uniapp/src/                     uniapp 源码
 说明/10-操作手册.md             当前最完整操作手册
+说明/16-业务逻辑审计与防错清单.md 权威业务逻辑与聊天防错规则
 ```
+
+如旧说明文档与 `说明/16-业务逻辑审计与防错清单.md` 冲突，以 `说明/16-业务逻辑审计与防错清单.md` 为准。
 
 ## 本地开发流程
 

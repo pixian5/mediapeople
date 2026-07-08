@@ -1959,9 +1959,21 @@ app.get("/api/client/chat/threads", requireAuth(["client"]), async (request, res
 
     const list = res.rows.map((row) => {
       const thread = row.raw;
-      // 找到对方（非当前用户的参与者）
-      const otherParticipant = (thread.participants || []).find(p => p.id !== userId);
-      const otherUser = otherParticipant ? participantMap.get(otherParticipant.id) : null;
+      let otherParticipant = (thread.participants || []).find(p => p.id !== userId);
+      let otherUser = otherParticipant ? participantMap.get(otherParticipant.id) : null;
+
+      if (thread.type === "matchmaker_group") {
+        const matchmakerParticipant = (thread.participants || []).find((p) => p.role === "matchmaker");
+        const otherClientParticipant = (thread.participants || []).find((p) => p.role === "client" && p.id !== userId);
+        const matchmakerInfo = matchmakerParticipant ? participantMap.get(matchmakerParticipant.id) : null;
+        const otherClientInfo = otherClientParticipant ? participantMap.get(otherClientParticipant.id) : null;
+        otherParticipant = { id: thread.id, role: "group" };
+        otherUser = {
+          name: `${matchmakerInfo?.name || "红娘"}、${otherClientInfo?.name || "对方"}（三方群聊）`,
+          photo: matchmakerInfo?.photo || otherClientInfo?.photo || null,
+          role: "group",
+        };
+      }
 
       return {
         ...thread,
