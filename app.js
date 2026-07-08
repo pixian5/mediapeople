@@ -2227,16 +2227,16 @@ function renderMatchmakerDesk() {
             : "";
         const talkBothBtn =
           getMatchmakerGroupThreadForRequest(request.id)
-            ? `<button class="primary-button" data-talk-both="${request.id}" type="button" style="width: auto;">来和双方对话</button>`
+            ? `<button class="primary-button" data-talk-both="${request.id}" type="button" style="width: auto;">来和双方对话（三人群聊）</button>`
             : "";
         const memberChatEnabled = Boolean(request.memberChatEnabled);
         const chatToggleBtn = memberChatEnabled
-          ? `<button class="ghost-button" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button" style="width: auto;">关闭双方私聊</button>`
-          : `<button class="primary-button" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button" style="width: auto;">开启双方私聊</button>`;
+          ? `<button class="ghost-button" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button" style="width: auto;">关闭双方沟通</button>`
+          : `<button class="primary-button" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button" style="width: auto;">开启双方沟通</button>`;
         const approvedTag = `
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 12px; border-radius:12px; background:${memberChatEnabled ? "rgba(20, 184, 166, 0.10)" : "rgba(148, 163, 184, 0.12)"};">
             <div>
-              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">男女双方私聊：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
+              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">男女双方沟通：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
               <span class="muted">控制男女会员是否能直接一对一聊天，不影响红娘私聊和三方群。</span>
             </div>
             ${chatToggleBtn}
