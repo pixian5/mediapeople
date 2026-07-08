@@ -322,6 +322,22 @@ function ensureStateDefaults(s) {
           };
           s.chatThreads.push(femaleThread);
         }
+        if (!s.chatThreads.some((t) => t.type === "matchmaker_group" && t.requestId === request.id)) {
+          s.chatThreads.push({
+            id: `ct_gen_${request.id}_group`,
+            type: "matchmaker_group",
+            requestId: request.id,
+            status: "active",
+            participants: [
+              { role: "matchmaker", id: request.matchmakerId },
+              { role: "client", id: request.fromUserId },
+              { role: "client", id: request.toUserId }
+            ],
+            createdAt: request.createdAt || new Date().toISOString(),
+            lastMessageAt: null,
+            lastMessagePreview: "",
+          });
+        }
       }
     }
     if (request.memberChatEnabled && !s.chatThreads.some((t) => t.type === "member_member" && t.requestId === request.id)) {
@@ -813,6 +829,16 @@ function getMatchmakerThreadsForRequest(requestId, matchmakerId) {
   );
 }
 
+function getMatchmakerGroupThreadForRequest(requestId) {
+  return state.chatThreads.find(
+    (thread) =>
+      thread.type === "matchmaker_group" &&
+      thread.requestId === requestId &&
+      (thread.participants || []).filter((participant) => participant.role === "client").length >= 2 &&
+      (thread.participants || []).some((participant) => participant.role === "matchmaker"),
+  ) || null;
+}
+
 function getThreadMessages(threadId) {
   return state.chatMessages
     .filter((message) => message.threadId === threadId)
@@ -828,6 +854,20 @@ function getOtherParticipant(thread, role, id) {
 }
 
 function getThreadDisplayName(thread, viewerRole, viewerId) {
+  if (thread.type === "matchmaker_group") {
+    const request = getRequestById(thread.requestId);
+    const { from, to } = request ? getRequestUsers(request) : { from: null, to: null };
+    if (viewerRole === "matchmaker") {
+      return `${from?.name || "男方"}、${to?.name || "女方"}（三方群聊）`;
+    }
+    const matchmakerParticipant = (thread.participants || []).find((participant) => participant.role === "matchmaker");
+    const mm = matchmakerParticipant ? getMatchmaker(matchmakerParticipant.id) : null;
+    const otherClient = (thread.participants || [])
+      .filter((participant) => participant.role === "client" && participant.id !== viewerId)
+      .map((participant) => state.users.find((item) => item.id === participant.id))
+      .find(Boolean);
+    return `${mm ? `红娘 ${mm.name}` : "红娘"}、${otherClient?.name || "对方"}（三方群聊）`;
+  }
   if (thread.type === "member_matchmaker" && viewerRole === "client") {
     const matchmakerParticipant = (thread.participants || []).find((participant) => participant.role === "matchmaker");
     const mm = matchmakerParticipant ? getMatchmaker(matchmakerParticipant.id) : null;
@@ -858,6 +898,9 @@ function getThreadSubtitle(thread) {
   if (!request) return thread.type === "member_member" ? "会员互聊" : "会员与红娘沟通";
   const from = state.users.find((item) => item.id === request.fromUserId);
   const to = state.users.find((item) => item.id === request.toUserId);
+  if (thread.type === "matchmaker_group") {
+    return `三方群聊 · 红娘与 ${from?.name || "会员"}、${to?.name || "会员"}`;
+  }
   if (thread.type === "member_member") {
     return `互聊已开启 · ${from?.name || "会员"} 与 ${to?.name || "会员"}`;
   }
@@ -913,6 +956,23 @@ function createLocalThread(type, request) {
     state.chatThreads.unshift(femaleThread);
 
     return maleThread;
+  } else if (type === "matchmaker_group") {
+    const thread = {
+      id: `ct_gen_${request.id}_group`,
+      type: "matchmaker_group",
+      requestId: request.id,
+      status: "active",
+      participants: [
+        { role: "matchmaker", id: request.matchmakerId },
+        { role: "client", id: request.fromUserId },
+        { role: "client", id: request.toUserId },
+      ],
+      createdAt: new Date().toISOString(),
+      lastMessageAt: null,
+      lastMessagePreview: "",
+    };
+    state.chatThreads.unshift(thread);
+    return thread;
   } else {
     const participants = [
       { role: "client", id: request.fromUserId },
@@ -1638,6 +1698,7 @@ function renderMiniChatSections(user, requests) {
 
   const accessibleThreads = state.chatThreads.filter((thread) => threadHasParticipant(thread, "client", user.id));
   const mmThreads = accessibleThreads.filter((thread) => thread.type === "member_matchmaker" && (thread.participants || []).length === 2);
+  const groupThreads = accessibleThreads.filter((thread) => thread.type === "matchmaker_group");
   const memberThreads = accessibleThreads.filter((thread) => {
     if (thread.type !== "member_member") return false;
     const req = getRequestById(thread.requestId);
@@ -1645,7 +1706,7 @@ function renderMiniChatSections(user, requests) {
   });
 
   if (!activeMiniChatThreadId || !accessibleThreads.some((thread) => thread.id === activeMiniChatThreadId)) {
-    activeMiniChatThreadId = mmThreads[0]?.id || memberThreads[0]?.id || null;
+    activeMiniChatThreadId = mmThreads[0]?.id || groupThreads[0]?.id || memberThreads[0]?.id || null;
   }
 
   threadList.innerHTML =
@@ -1666,29 +1727,44 @@ function renderMiniChatSections(user, requests) {
   mutualList.innerHTML =
     requests
       .filter((request) => request.fromUserId === user.id || request.toUserId === user.id)
-      .map((request) => {
-        const thread = memberThreads.find((item) => item.requestId === request.id);
+      .flatMap((request) => {
+        const groupThread = groupThreads.find((item) => item.requestId === request.id);
+        const memberThread = memberThreads.find((item) => item.requestId === request.id);
         const otherUser =
           request.fromUserId === user.id
             ? state.users.find((item) => item.id === request.toUserId)
             : state.users.find((item) => item.id === request.fromUserId);
-        if (!thread) {
-          return `
+        const cards = [];
+        if (groupThread) {
+          const active = groupThread.id === activeMiniChatThreadId ? " active" : "";
+          const preview = groupThread.lastMessagePreview || "红娘已把双方拉进三方群，可以在这里共同沟通。";
+          cards.push(`
+            <button class="chat-thread-card${active}" type="button" data-open-thread="${groupThread.id}">
+              <strong>${getThreadDisplayName(groupThread, "client", user.id)}</strong>
+              <span>${getThreadSubtitle(groupThread)}</span>
+              <em>${preview}</em>
+            </button>
+          `);
+        }
+        if (!memberThread) {
+          cards.push(`
             <div class="request-card muted">
               <strong>${otherUser?.name || "会员"}</strong>
               <div>${request.memberChatEnabled ? "聊天线程生成中，请稍候刷新。" : "红娘开通后，这里会出现双方互聊入口。"}</div>
             </div>
-          `;
+          `);
+          return cards;
         }
-        const active = thread.id === activeMiniChatThreadId ? " active" : "";
-        const preview = thread.lastMessagePreview || "你们现在可以直接聊天了。";
-        return `
-          <button class="chat-thread-card${active}" type="button" data-open-thread="${thread.id}">
-            <strong>${getThreadDisplayName(thread, "client", user.id)}</strong>
-            <span>${getThreadSubtitle(thread)}</span>
+        const active = memberThread.id === activeMiniChatThreadId ? " active" : "";
+        const preview = memberThread.lastMessagePreview || "你们现在可以直接聊天了。";
+        cards.push(`
+          <button class="chat-thread-card${active}" type="button" data-open-thread="${memberThread.id}">
+            <strong>${getThreadDisplayName(memberThread, "client", user.id)}</strong>
+            <span>${getThreadSubtitle(memberThread)}</span>
             <em>${preview}</em>
           </button>
-        `;
+        `);
+        return cards;
       })
       .join("") || `<div class="request-card muted">暂无会员互聊会话。</div>`;
 
@@ -1722,7 +1798,7 @@ function renderMiniChatSections(user, requests) {
       .join("");
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
-  input.placeholder = activeThread.type === "member_member" ? "和对方打个招呼吧" : "把你的想法发给红娘";
+  input.placeholder = activeThread.type === "member_member" ? "和对方打个招呼吧" : activeThread.type === "matchmaker_group" ? "发送到三方群聊" : "把你的想法发给红娘";
   input.focus();
 }
 
@@ -2221,9 +2297,11 @@ function renderMatchmakerChats(matchmakerId) {
 
   const threads = state.chatThreads.filter(
     (thread) =>
-      thread.type === "member_matchmaker" &&
-      (thread.participants || []).length === 2 &&
-      threadHasParticipant(thread, "matchmaker", matchmakerId),
+      threadHasParticipant(thread, "matchmaker", matchmakerId) &&
+      (
+        (thread.type === "member_matchmaker" && (thread.participants || []).length === 2) ||
+        thread.type === "matchmaker_group"
+      ),
   );
   if (!activeMatchmakerChatThreadId || !threads.some((thread) => thread.id === activeMatchmakerChatThreadId)) {
     activeMatchmakerChatThreadId = threads[0]?.id || null;
@@ -2233,7 +2311,7 @@ function renderMatchmakerChats(matchmakerId) {
     threads
       .map((thread) => {
         const active = thread.id === activeMatchmakerChatThreadId ? " active" : "";
-        const preview = thread.lastMessagePreview || "这里可以和会员直接沟通牵线进度。";
+        const preview = thread.lastMessagePreview || (thread.type === "matchmaker_group" ? "这里是红娘与男女双方的三方群聊。" : "这里可以和会员直接沟通牵线进度。");
         return `
           <button class="chat-thread-card${active}" type="button" data-open-mm-thread="${thread.id}">
             <strong>${getThreadDisplayName(thread, "matchmaker", matchmakerId)}</strong>
@@ -2277,7 +2355,7 @@ function renderMatchmakerChats(matchmakerId) {
       .join("");
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
-  input.placeholder = "给会员发送消息";
+  input.placeholder = activeThread.type === "matchmaker_group" ? "发送到三方群聊" : "给会员发送消息";
   input.focus();
 }
 
@@ -2289,17 +2367,16 @@ async function completeRequest(requestId) {
 
 function openThreeWayChat(requestId) {
   const request = getRequestById(requestId);
-  const { maleUser, femaleUser } = request ? getGenderParticipants(request) : { maleUser: null, femaleUser: null };
-  const thread =
-    (maleUser && getMatchmakerThreadForRequest(requestId, maleUser.id)) ||
-    (femaleUser && getMatchmakerThreadForRequest(requestId, femaleUser.id)) ||
-    null;
+  let thread = getMatchmakerGroupThreadForRequest(requestId);
+  if (!thread && request) {
+    thread = createLocalThread("matchmaker_group", request);
+  }
   if (thread) {
     activeMatchmakerChatThreadId = thread.id;
     matchmakerChatModalOpen = true;
-    showToast("已打开双方会话");
+    showToast("已打开三方群聊");
   } else {
-    showToast("未找到会话，请刷新页面");
+    showToast("未找到三方群聊，请刷新页面");
   }
   renderAll();
 }

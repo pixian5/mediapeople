@@ -575,6 +575,23 @@ function buildMemberMemberThread(request) {
   });
 }
 
+function buildMatchmakerGroupThread(request) {
+  return ensureThreadDefaults({
+    id: `ct_gen_${request.id}_group`,
+    type: "matchmaker_group",
+    requestId: request.id,
+    status: "active",
+    participants: [
+      { role: "matchmaker", id: request.matchmakerId },
+      { role: "client", id: request.fromUserId },
+      { role: "client", id: request.toUserId },
+    ],
+    createdAt: request.createdAt || new Date().toISOString(),
+    lastMessageAt: null,
+    lastMessagePreview: "",
+  });
+}
+
 function normalizePhone(value) {
   return String(value || "").trim();
 }
@@ -693,6 +710,25 @@ async function readState() {
             [femaleThread.id, femaleThread.type, femaleThread.requestId, femaleThread.status, JSON.stringify(femaleThread.participants), JSON.stringify(femaleThread)]
           );
           allThreads.push(femaleThread);
+        }
+
+        let groupThread = allThreads.find(
+          (t) =>
+            t.requestId === request.id &&
+            t.type === "matchmaker_group" &&
+            t.participants.some((p) => p.role === "matchmaker" && p.id === request.matchmakerId) &&
+            t.participants.some((p) => p.role === "client" && p.id === request.fromUserId) &&
+            t.participants.some((p) => p.role === "client" && p.id === request.toUserId),
+        );
+        if (!groupThread) {
+          groupThread = buildMatchmakerGroupThread(request);
+          await pool.query(
+            `insert into chat_threads (id, type, request_id, status, participants, raw)
+             values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+             on conflict (id) do nothing`,
+            [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+          );
+          allThreads.push(groupThread);
         }
         
       }
@@ -1474,6 +1510,13 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
       [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)]
     );
   }
+  const groupThread = buildMatchmakerGroupThread(matchReq);
+  await pool.query(
+    `insert into chat_threads (id, type, request_id, status, participants, raw)
+     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+     on conflict (id) do nothing`,
+    [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+  );
 
   response.status(201).json({ request: matchReq, state: publicState(await readState()) });
 });
