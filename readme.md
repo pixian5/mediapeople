@@ -114,6 +114,15 @@ npm run build:h5
 npm run build:mp-weixin
 ```
 
+线上全业务回归审计：
+
+```bash
+cd /Users/x/code/mediapeople
+node scripts/full-business-audit.mjs
+```
+
+该脚本直接访问线上 HTTPS API，会创建测试机构、红娘、会员、牵线单和聊天消息。
+
 如果只需要生成静态 HTML 版本号：
 
 ```bash
