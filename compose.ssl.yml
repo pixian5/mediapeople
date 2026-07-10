@@ -32,6 +32,8 @@ services:
       - ./deploy/nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /root/.acme.sh/sbbz.tech_ecc/fullchain.cer:/etc/nginx/certs/fullchain.cer:ro
       - /root/.acme.sh/sbbz.tech_ecc/sbbz.tech.key:/etc/nginx/certs/privkey.key:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web-matchmaker-ssl:
     image: nginx:1.27-alpine
@@ -49,6 +51,8 @@ services:
       - ./deploy/nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /root/.acme.sh/sbbz.tech_ecc/fullchain.cer:/etc/nginx/certs/fullchain.cer:ro
       - /root/.acme.sh/sbbz.tech_ecc/sbbz.tech.key:/etc/nginx/certs/privkey.key:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web-admin-ssl:
     image: nginx:1.27-alpine
@@ -66,3 +70,5 @@ services:
       - ./deploy/nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /root/.acme.sh/sbbz.tech_ecc/fullchain.cer:/etc/nginx/certs/fullchain.cer:ro
       - /root/.acme.sh/sbbz.tech_ecc/sbbz.tech.key:/etc/nginx/certs/privkey.key:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
