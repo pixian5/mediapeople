@@ -200,3 +200,18 @@ page {
   color: $color-muted;
   font-size: $font-sm;
 }
+
+/* H5 桌面预览时，聊天页保持手机宽度，避免输入栏和气泡被拉成整屏。 */
+@media screen and (min-width: 520px) {
+  body {
+    background: linear-gradient(135deg, #dfe8eb 0%, #f6f8f9 100%);
+  }
+
+  uni-page[data-page="pages/chat-detail/index"] {
+    max-width: 430px;
+    margin: 0 auto;
+    overflow: hidden;
+    background: $color-bg;
+    box-shadow: 0 28px 90px rgba(30, 38, 51, 0.18);
+  }
+}
