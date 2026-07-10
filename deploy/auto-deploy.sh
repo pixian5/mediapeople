@@ -51,8 +51,8 @@ CURRENT_HEAD=""
 H5_BUILD_STAMP="$REPO_DIR/uniapp/dist/build/h5/.build-commit"
 
 # 拉取最新代码
-log "正在 git pull..."
-git pull origin master 2>&1 | tee -a "$LOG_FILE"
+log "正在 git pull --ff-only..."
+git pull --ff-only origin master 2>&1 | tee -a "$LOG_FILE"
 CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
 
 # 检查是否有 server/ / uniapp/ 变更（需要重新构建对应产物）
