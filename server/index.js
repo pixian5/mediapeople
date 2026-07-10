@@ -483,6 +483,12 @@ function buildMatchmakerProfilePayload(user) {
   };
 }
 
+function applyPublishedProfile(user) {
+  const matchmakerId = user.delegatedMatchmakerIds?.[0] || user.referralMatchmakerId || null;
+  const published = matchmakerId ? user.profileByMatchmaker?.[matchmakerId]?.published : null;
+  return published ? { ...user, ...published } : { ...user };
+}
+
 function upsertUserVipMatchmaker(user, matchmakerId) {
   ensureUserDefaults(user);
   if (!matchmakerId) return user;
@@ -1631,7 +1637,7 @@ app.patch("/api/matchmaker/requests/:id/member-chat", requireAuth(["matchmaker"]
   response.json({ request: req, state: publicState(await readState()) });
 });
 
-app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker", "admin"]), async (request, response) => {
+app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"]), async (request, response) => {
   const threadId = request.params.id;
   const content = String(request.body?.content || "").trim();
   if (!content) return response.status(400).json({ error: "content_required" });
@@ -1862,7 +1868,8 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
 
     // 处理返回数据：排除敏感字段，非 VIP 不返回 wechat
     const list = listRes.rows.map((row) => {
-      const { passwordHash, idCard, ...userInfo } = row.raw;
+      const visibleUser = applyPublishedProfile(row.raw);
+      const { passwordHash, idCard, profileByMatchmaker, ...userInfo } = visibleUser;
       if (!canViewTargetContact(me, row.raw)) {
         delete userInfo.wechat;
       }
@@ -1904,7 +1911,8 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
     }
 
     // 排除敏感字段
-    const { passwordHash, idCard, ...userInfo } = targetRes.rows[0].raw;
+    const visibleUser = applyPublishedProfile(targetRes.rows[0].raw);
+    const { passwordHash, idCard, profileByMatchmaker, ...userInfo } = visibleUser;
     // 非 VIP 用户不返回微信号
     if (!canViewTargetContact(me, targetRes.rows[0].raw)) {
       delete userInfo.wechat;
