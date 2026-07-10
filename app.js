@@ -2246,13 +2246,13 @@ function renderMatchmakerDesk() {
             : "";
         const memberChatEnabled = Boolean(request.memberChatEnabled);
         const chatToggleBtn = memberChatEnabled
-          ? `<button class="member-chat-toggle member-chat-toggle-off" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button">关闭双方沟通</button>`
-          : `<button class="member-chat-toggle member-chat-toggle-on" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button">开启双方沟通</button>`;
+          ? `<button class="member-chat-toggle member-chat-toggle-off" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button">关闭群聊</button>`
+          : `<button class="member-chat-toggle member-chat-toggle-on" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button">开启群聊</button>`;
         const approvedTag = `
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 12px; border-radius:12px; background:${memberChatEnabled ? "rgba(20, 184, 166, 0.10)" : "rgba(148, 163, 184, 0.12)"};">
             <div>
-              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">男女双方沟通：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
-              <span class="muted">控制男女会员是否能直接一对一聊天，不影响红娘私聊和三方群。</span>
+              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">群聊权限：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
+              <span class="muted">控制男女会员是否能进入群聊入口，不影响红娘私聊。</span>
             </div>
             ${chatToggleBtn}
           </div>
@@ -2512,7 +2512,7 @@ async function toggleMemberChat(requestId, enabled) {
   }
 
   renderAll();
-  showToast(enabled ? "已开通双方沟通" : "已关闭双方沟通");
+  showToast(enabled ? "已开启群聊" : "已关闭群聊");
 }
 
 async function reviewMatchmakerProfile(userId, action) {
@@ -2564,7 +2564,7 @@ async function sendMiniChatMessage(event) {
   const input = $("#miniChatInput");
   if (!thread || !user || !input) return;
   if (thread.type === "member_member" && !getRequestById(thread.requestId)?.memberChatEnabled) {
-    showToast("红娘暂未开通双方沟通权限");
+    showToast("红娘暂未开启群聊权限");
     return;
   }
   const content = input.value.trim();
