@@ -214,4 +214,11 @@ page {
     background: $color-bg;
     box-shadow: 0 28px 90px rgba(30, 38, 51, 0.18);
   }
+
+  uni-page[data-page="pages/chat-detail/index"] .uni-page-head {
+    left: 50% !important;
+    width: 430px !important;
+    max-width: 430px;
+    transform: translateX(-50%);
+  }
 }
