@@ -54,6 +54,7 @@ let pollTimer = null;
 
 const POLL_INTERVAL = 10000;
 const canSend = computed(() => Boolean(inputText.value.trim()));
+const isH5Runtime = typeof window !== 'undefined';
 
 onLoad((options) => {
   if (options.threadId) {
@@ -188,6 +189,14 @@ const formatTime = (dateStr) => {
 };
 
 const restoreInputFocus = () => {
+  if (isH5Runtime) {
+    nextTick(() => {
+      if (typeof messageInputRef.value?.focus === 'function') {
+        messageInputRef.value.focus();
+      }
+    });
+    return;
+  }
   inputFocused.value = false;
   nextTick(() => {
     inputFocused.value = true;
