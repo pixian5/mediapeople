@@ -92,13 +92,14 @@ const loadMessages = async () => {
   }
 };
 
-const syncLatestMessages = async () => {
-  if (!threadId.value || sending.value) return;
+const syncLatestMessages = async (force = false) => {
+  if (!threadId.value || (sending.value && !force)) return;
   try {
     const res = await getChatMessagesApi(threadId.value);
     const newMessages = res.data?.list || [];
-    if (newMessages.length > messages.value.length) {
-      mergeMessages(newMessages);
+    const shouldScroll = newMessages.length > messages.value.filter((msg) => !tempMessageIds.value.has(msg.id)).length;
+    mergeMessages(newMessages);
+    if (shouldScroll) {
       scrollToBottom();
     }
   } catch (error) {
@@ -107,33 +108,14 @@ const syncLatestMessages = async () => {
 };
 
 const mergeMessages = (newMessages) => {
-  const existingIds = new Set(messages.value.map(m => m.id));
   const tempIds = new Set(tempMessageIds.value);
-  
-  const merged = [];
-  const seenIds = new Set();
-  
-  for (const msg of newMessages) {
-    if (seenIds.has(msg.id)) continue;
-    seenIds.add(msg.id);
-    
-    if (tempIds.has(msg.id)) {
-      tempIds.delete(msg.id);
-      merged.push(msg);
-    } else if (!existingIds.has(msg.id)) {
-      merged.push(msg);
-    }
-  }
-  
-  for (const msg of messages.value) {
-    if (!seenIds.has(msg.id) && tempIds.has(msg.id)) {
-      merged.push(msg);
-    }
-  }
-  
+  const serverIds = new Set(newMessages.map((msg) => msg.id));
+  const pendingTempMessages = messages.value.filter((msg) => tempIds.has(msg.id) && !serverIds.has(msg.id));
+  const merged = [...newMessages, ...pendingTempMessages];
+
   merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   messages.value = merged;
-  tempMessageIds.value = tempIds;
+  tempMessageIds.value = new Set(pendingTempMessages.map((msg) => msg.id));
 };
 
 const scrollToBottom = () => {
@@ -167,8 +149,14 @@ const handleSend = async () => {
   scrollToBottom();
   
   try {
-    await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId });
-    await syncLatestMessages();
+    const res = await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId });
+    const realMessage = res.message || res.data?.message;
+    await syncLatestMessages(true);
+    if (realMessage) {
+      tempMessageIds.value.delete(tempId);
+      messages.value = messages.value.filter((msg) => msg.id !== tempId);
+      mergeMessages([...messages.value, realMessage]);
+    }
   } catch (error) {
     tempMessageIds.value.delete(tempId);
     messages.value = messages.value.filter(m => m.id !== tempId);
