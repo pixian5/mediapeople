@@ -11,6 +11,23 @@
             </view>
           </view>
           <text class="time">申请时间: {{ formatDate(item.createdAt) }}</text>
+          <view class="action-row">
+            <button class="action-btn primary" @click.stop="openMatchmakerChat(item)">联系红娘</button>
+            <button
+              v-if="item.memberChatEnabled"
+              class="action-btn secondary"
+              @click.stop="openMemberChat(item)"
+            >
+              与对方互聊
+            </button>
+            <button
+              v-else
+              class="action-btn secondary"
+              @click.stop="applyMemberChat(item)"
+            >
+              申请聊天
+            </button>
+          </view>
         </view>
       </view>
       
@@ -25,16 +42,23 @@
 <script setup>
 import { ref } from 'vue';
 import { getMatchRequestsApi } from '@/api/client';
+import { getChatThreadsApi } from '@/api/chat';
 import { onShow } from '@dcloudio/uni-app';
 
 const list = ref([]);
+const threads = ref([]);
 const loading = ref(true);
+const memberChatRequestText = '我想申请开通和对方的聊天权限，请红娘审核。';
 
 const loadData = async () => {
   loading.value = true;
   try {
-    const res = await getMatchRequestsApi();
+    const [res, threadRes] = await Promise.all([
+      getMatchRequestsApi(),
+      getChatThreadsApi(),
+    ]);
     list.value = res.data?.list || [];
+    threads.value = threadRes.data?.list || [];
   } catch (error) {
     //
   } finally {
@@ -70,6 +94,35 @@ const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const findThread = (type, requestId) => {
+  return threads.value.find((item) => item.type === type && item.requestId === requestId);
+};
+
+const openThread = (thread, draft = '') => {
+  if (!thread) {
+    uni.showToast({ title: '聊天暂未生成，请稍后刷新', icon: 'none' });
+    return;
+  }
+  const draftQuery = draft ? `&draft=${encodeURIComponent(draft)}` : '';
+  uni.navigateTo({ url: `/pages/chat-detail/index?threadId=${thread.id}${draftQuery}` });
+};
+
+const openMatchmakerChat = (item, draft = '') => {
+  openThread(findThread('member_matchmaker', item.id), draft);
+};
+
+const openMemberChat = (item) => {
+  if (!item.memberChatEnabled) {
+    applyMemberChat(item);
+    return;
+  }
+  openThread(findThread('member_member', item.id));
+};
+
+const applyMemberChat = (item) => {
+  openMatchmakerChat(item, memberChatRequestText);
 };
 </script>
 
@@ -117,6 +170,32 @@ const formatDate = (dateStr) => {
     .time {
       font-size: $font-sm;
       color: $color-muted;
+    }
+
+    .action-row {
+      display: flex;
+      gap: $spacing-sm;
+      margin-top: $spacing-sm;
+
+      .action-btn {
+        flex: 1;
+        height: 64rpx;
+        line-height: 64rpx;
+        border-radius: $radius-sm;
+        font-size: $font-sm;
+        padding: 0;
+        margin: 0;
+
+        &.primary {
+          color: #fff;
+          background: $color-primary;
+        }
+
+        &.secondary {
+          color: $color-primary-dark;
+          background: $color-primary-light;
+        }
+      }
     }
   }
 }

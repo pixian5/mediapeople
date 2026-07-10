@@ -1992,8 +1992,26 @@ app.get("/api/client/chat/threads", requireAuth(["client"]), async (request, res
       [...usersRes.rows, ...matchmakersRes.rows].map((r) => [r.id, { name: r.name, photo: r.photo, role: r.role }]),
     );
 
-    const list = res.rows.map((row) => {
-      const thread = row.raw;
+    const rawThreads = res.rows.map((row) => ensureThreadDefaults(row.raw));
+    const memberRequestIds = [
+      ...new Set(
+        rawThreads
+          .filter((thread) => thread.type === "member_member" && thread.requestId)
+          .map((thread) => thread.requestId),
+      ),
+    ];
+    let requestMap = new Map();
+    if (memberRequestIds.length > 0) {
+      const requestRes = await pool.query("select id, raw from match_requests where id = any($1::text[])", [memberRequestIds]);
+      requestMap = new Map(requestRes.rows.map((row) => [row.id, ensureRequestDefaults(row.raw)]));
+    }
+
+    const visibleThreads = rawThreads.filter((thread) => {
+      if (thread.type !== "member_member") return true;
+      return Boolean(requestMap.get(thread.requestId)?.memberChatEnabled);
+    });
+
+    const list = visibleThreads.map((thread) => {
       let otherParticipant = (thread.participants || []).find(p => p.id !== userId);
       let otherUser = otherParticipant ? participantMap.get(otherParticipant.id) : null;
 

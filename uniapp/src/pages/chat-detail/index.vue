@@ -30,6 +30,9 @@ const scrollToId = ref('');
 onLoad((options) => {
   if (options.threadId) {
     threadId.value = options.threadId;
+    if (options.draft) {
+      inputText.value = decodeURIComponent(options.draft);
+    }
     loadMessages();
   }
 });
