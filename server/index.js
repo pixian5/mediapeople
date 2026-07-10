@@ -516,6 +516,10 @@ function getRequestContactStatus(request) {
   return "待红娘联系";
 }
 
+function isGroupChatAllowed(request) {
+  return Boolean(request?.maleContacted && request?.femaleContacted);
+}
+
 function ensureThreadDefaults(thread) {
   if (thread.status === undefined) thread.status = "active";
   if (!Array.isArray(thread.participants)) thread.participants = [];
@@ -728,23 +732,25 @@ async function readState() {
           allThreads.push(femaleThread);
         }
 
-        let groupThread = allThreads.find(
-          (t) =>
-            t.requestId === request.id &&
-            t.type === "matchmaker_group" &&
-            t.participants.some((p) => p.role === "matchmaker" && p.id === request.matchmakerId) &&
-            t.participants.some((p) => p.role === "client" && p.id === request.fromUserId) &&
-            t.participants.some((p) => p.role === "client" && p.id === request.toUserId),
-        );
-        if (!groupThread) {
-          groupThread = buildMatchmakerGroupThread(request);
-          await pool.query(
-            `insert into chat_threads (id, type, request_id, status, participants, raw)
-             values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-             on conflict (id) do nothing`,
-            [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+        if (isGroupChatAllowed(request)) {
+          let groupThread = allThreads.find(
+            (t) =>
+              t.requestId === request.id &&
+              t.type === "matchmaker_group" &&
+              t.participants.some((p) => p.role === "matchmaker" && p.id === request.matchmakerId) &&
+              t.participants.some((p) => p.role === "client" && p.id === request.fromUserId) &&
+              t.participants.some((p) => p.role === "client" && p.id === request.toUserId),
           );
-          allThreads.push(groupThread);
+          if (!groupThread) {
+            groupThread = buildMatchmakerGroupThread(request);
+            await pool.query(
+              `insert into chat_threads (id, type, request_id, status, participants, raw)
+               values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+               on conflict (id) do nothing`,
+              [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+            );
+            allThreads.push(groupThread);
+          }
         }
         
       }
@@ -1530,13 +1536,6 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
       [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)]
     );
   }
-  const groupThread = buildMatchmakerGroupThread(matchReq);
-  await pool.query(
-    `insert into chat_threads (id, type, request_id, status, participants, raw)
-     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-     on conflict (id) do nothing`,
-    [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
-  );
 
   response.status(201).json({ request: matchReq, state: publicState(await readState()) });
 });
@@ -1563,6 +1562,15 @@ app.patch("/api/matchmaker/requests/:id/contacted", requireAuth(["matchmaker"]),
     "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
     [req.status, JSON.stringify(req), requestId]
   );
+  if (isGroupChatAllowed(req)) {
+    const groupThread = buildMatchmakerGroupThread(req);
+    await pool.query(
+      `insert into chat_threads (id, type, request_id, status, participants, raw)
+       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+       on conflict (id) do nothing`,
+      [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+    );
+  }
   response.json({ request: req, state: publicState(await readState()) });
 });
 
@@ -1993,27 +2001,39 @@ app.get("/api/client/chat/threads", requireAuth(["client"]), async (request, res
     );
 
     const rawThreads = res.rows.map((row) => ensureThreadDefaults(row.raw));
-    const memberRequestIds = [
-      ...new Set(
-        rawThreads
-          .filter((thread) => thread.type === "member_member" && thread.requestId)
-          .map((thread) => thread.requestId),
-      ),
+    const requestIds = [
+      ...new Set(rawThreads.filter((thread) => thread.requestId).map((thread) => thread.requestId)),
     ];
     let requestMap = new Map();
-    if (memberRequestIds.length > 0) {
-      const requestRes = await pool.query("select id, raw from match_requests where id = any($1::text[])", [memberRequestIds]);
+    if (requestIds.length > 0) {
+      const requestRes = await pool.query("select id, raw from match_requests where id = any($1::text[])", [requestIds]);
       requestMap = new Map(requestRes.rows.map((row) => [row.id, ensureRequestDefaults(row.raw)]));
     }
 
     const visibleThreads = rawThreads.filter((thread) => {
-      if (thread.type !== "member_member") return true;
-      return Boolean(requestMap.get(thread.requestId)?.memberChatEnabled);
+      const matchRequest = requestMap.get(thread.requestId);
+      if (thread.type === "member_member") return Boolean(matchRequest?.memberChatEnabled);
+      if (thread.type === "matchmaker_group") return isGroupChatAllowed(matchRequest);
+      return true;
     });
 
     const list = visibleThreads.map((thread) => {
       let otherParticipant = (thread.participants || []).find(p => p.id !== userId);
       let otherUser = otherParticipant ? participantMap.get(otherParticipant.id) : null;
+      const matchRequest = requestMap.get(thread.requestId);
+
+      if (thread.type === "member_matchmaker" && matchRequest) {
+        const matchmakerParticipant = (thread.participants || []).find((p) => p.role === "matchmaker");
+        const matchmakerInfo = matchmakerParticipant ? participantMap.get(matchmakerParticipant.id) : null;
+        const otherClientId = matchRequest.fromUserId === userId ? matchRequest.toUserId : matchRequest.fromUserId;
+        const otherClientInfo = participantMap.get(otherClientId);
+        otherParticipant = matchmakerParticipant || otherParticipant;
+        otherUser = {
+          name: `${otherClientInfo?.name || "对方"}-红娘${matchmakerInfo?.name || ""}`,
+          photo: matchmakerInfo?.photo || otherClientInfo?.photo || null,
+          role: "matchmaker",
+        };
+      }
 
       if (thread.type === "matchmaker_group") {
         const matchmakerParticipant = (thread.participants || []).find((p) => p.role === "matchmaker");

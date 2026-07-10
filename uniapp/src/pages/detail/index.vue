@@ -112,28 +112,11 @@ const handleMatchRequest = async () => {
   }
 
   if (!isVipForSelectedMatchmaker.value) {
-    uni.showModal({
-      title: '提示',
-      content: `申请牵线需要先成为${selectedMatchmaker.value.name}的专属VIP`,
-      confirmText: '开通并申请',
-      success: async (res) => {
-        if (res.confirm) {
-          await submitMatchRequest(true);
-        }
-      }
-    });
+    await submitMatchRequest(true);
     return;
   }
 
-  uni.showModal({
-    title: '确认申请',
-    content: `确定要请${selectedMatchmaker.value.name}为你和${profile.value.name}牵线吗？`,
-    success: async (res) => {
-      if (res.confirm) {
-        await submitMatchRequest(false);
-      }
-    }
-  });
+  await submitMatchRequest(false);
 };
 
 const submitMatchRequest = async (needRedeemVip) => {

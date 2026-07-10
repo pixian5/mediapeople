@@ -322,7 +322,7 @@ function ensureStateDefaults(s) {
           };
           s.chatThreads.push(femaleThread);
         }
-        if (!s.chatThreads.some((t) => t.type === "matchmaker_group" && t.requestId === request.id)) {
+        if (isGroupChatAllowed(request) && !s.chatThreads.some((t) => t.type === "matchmaker_group" && t.requestId === request.id)) {
           s.chatThreads.push({
             id: `ct_gen_${request.id}_group`,
             type: "matchmaker_group",
@@ -364,6 +364,10 @@ function getRequestContactStatus(request) {
   if (request.maleContacted) return "联系男方";
   if (request.femaleContacted) return "联系女方";
   return "待红娘联系";
+}
+
+function isGroupChatAllowed(request) {
+  return Boolean(request?.maleContacted && request?.femaleContacted);
 }
 
 function getRequestUsers(request) {
@@ -831,6 +835,7 @@ function getMatchmakerThreadsForRequest(requestId, matchmakerId) {
 }
 
 function getMatchmakerGroupThreadForRequest(requestId) {
+  if (!isGroupChatAllowed(getRequestById(requestId))) return null;
   return state.chatThreads.find(
     (thread) =>
       thread.type === "matchmaker_group" &&
@@ -872,7 +877,10 @@ function getThreadDisplayName(thread, viewerRole, viewerId) {
   if (thread.type === "member_matchmaker" && viewerRole === "client") {
     const matchmakerParticipant = (thread.participants || []).find((participant) => participant.role === "matchmaker");
     const mm = matchmakerParticipant ? getMatchmaker(matchmakerParticipant.id) : null;
-    return mm ? `红娘 ${mm.name}` : "专属红娘";
+    const request = getRequestById(thread.requestId);
+    const { from, to } = request ? getRequestUsers(request) : { from: null, to: null };
+    const otherClient = request?.fromUserId === viewerId ? to : from;
+    return `${otherClient?.name || "对方"}-${mm ? `红娘${mm.name}` : "专属红娘"}`;
   }
   if (thread.type === "member_matchmaker" && viewerRole === "matchmaker") {
     const client = (thread.participants || [])
@@ -1626,7 +1634,6 @@ async function createRequest(targetUserId, matchmakerId) {
     state.requests.unshift(newRequest);
     if (selectedMatchmakerId) {
       createLocalThread("member_matchmaker", newRequest);
-      createLocalThread("matchmaker_group", newRequest);
     }
     saveState();
     renderAll();
@@ -1708,7 +1715,7 @@ function renderMiniChatSections(user, requests) {
 
   const accessibleThreads = state.chatThreads.filter((thread) => threadHasParticipant(thread, "client", user.id));
   const mmThreads = accessibleThreads.filter((thread) => thread.type === "member_matchmaker" && (thread.participants || []).length === 2);
-  const groupThreads = accessibleThreads.filter((thread) => thread.type === "matchmaker_group");
+  const groupThreads = accessibleThreads.filter((thread) => thread.type === "matchmaker_group" && isGroupChatAllowed(getRequestById(thread.requestId)));
   const memberThreads = accessibleThreads.filter((thread) => {
     if (thread.type !== "member_member") return false;
     const req = getRequestById(thread.requestId);
@@ -2320,7 +2327,7 @@ function renderMatchmakerChats(matchmakerId) {
       threadHasParticipant(thread, "matchmaker", matchmakerId) &&
       (
         (thread.type === "member_matchmaker" && (thread.participants || []).length === 2) ||
-        thread.type === "matchmaker_group"
+        (thread.type === "matchmaker_group" && isGroupChatAllowed(getRequestById(thread.requestId)))
       ),
   );
   if (!activeMatchmakerChatThreadId || !threads.some((thread) => thread.id === activeMatchmakerChatThreadId)) {
@@ -2446,6 +2453,9 @@ async function contactRequestSide(requestId, side) {
     if (side === "male") request.maleContacted = true;
     if (side === "female") request.femaleContacted = true;
     request.status = getRequestContactStatus(request);
+    if (isGroupChatAllowed(request) && !getMatchmakerGroupThreadForRequest(request.id)) {
+      createLocalThread("matchmaker_group", request);
+    }
     saveState();
     showToast(`已标记联系${side === "male" ? "男方" : "女方"}`);
   }
@@ -3790,12 +3800,12 @@ function bindEvents() {
     showVipSubpanel(false);
   });
 
-  // 用户修改兑换码输入框时重置“确定”按钮
+  // 用户修改兑换码输入框时重置兑换按钮
   const promoInput = $("#vipPromoCodeInput");
   const promoBtn = $("#redeemVipBtn");
   if (promoInput && promoBtn) {
     promoInput.addEventListener("input", () => {
-      promoBtn.textContent = "确定";
+      promoBtn.textContent = "兑换";
       promoBtn.style.background = "";
     });
   }

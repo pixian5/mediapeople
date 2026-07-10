@@ -72,15 +72,7 @@ const navigateTo = (url) => {
 };
 
 const handleLogout = () => {
-  uni.showModal({
-    title: '提示',
-    content: '确定要退出登录吗？',
-    success: (res) => {
-      if (res.confirm) {
-        userStore.logout();
-      }
-    }
-  });
+  userStore.logout();
 };
 </script>
 
