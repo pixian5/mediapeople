@@ -46,12 +46,21 @@ log "===== 开始自动部署 ====="
 
 cd "$REPO_DIR"
 
+PREVIOUS_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
+CURRENT_HEAD=""
+H5_BUILD_STAMP="$REPO_DIR/uniapp/dist/build/h5/.build-commit"
+
 # 拉取最新代码
 log "正在 git pull..."
 git pull origin master 2>&1 | tee -a "$LOG_FILE"
+CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
 
-# 检查是否有 server/ 变更（需要重新构建 api 容器）
-CHANGED_FILES=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null || echo "")
+# 检查是否有 server/ / uniapp/ 变更（需要重新构建对应产物）
+if [ -n "$PREVIOUS_HEAD" ] && [ -n "$CURRENT_HEAD" ] && [ "$PREVIOUS_HEAD" != "$CURRENT_HEAD" ]; then
+  CHANGED_FILES="$(git diff "$PREVIOUS_HEAD" "$CURRENT_HEAD" --name-only 2>/dev/null || echo '')"
+else
+  CHANGED_FILES=""
+fi
 
 NODE_BIN="${NODE_BIN:-}"
 if [ -z "$NODE_BIN" ]; then
@@ -70,11 +79,9 @@ if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
 fi
 export PATH="$(dirname "$NODE_BIN"):$PATH"
 
-log "正在生成带自动版本号的静态页面..."
-"$NODE_BIN" "$REPO_DIR/scripts/render-static.mjs" 2>&1 | tee -a "$LOG_FILE"
+build_uniapp_h5() {
+  log "开始构建 uniapp H5..."
 
-if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
-  log "检测到 uniapp/ 变更，构建 H5 版本..."
   NPM_BIN="${NPM_BIN:-}"
   if [ -z "$NPM_BIN" ] && command -v npm >/dev/null 2>&1; then
     NPM_BIN="$(command -v npm)"
@@ -100,6 +107,22 @@ if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
     log "ERROR: npm 和 Docker 都不可用，无法构建 uniapp H5"
     exit 1
   fi
+
+  mkdir -p "$(dirname "$H5_BUILD_STAMP")"
+  printf '%s\n' "$CURRENT_HEAD" > "$H5_BUILD_STAMP"
+  log "uniapp H5 构建完成，已记录提交标记: ${CURRENT_HEAD}"
+}
+
+log "正在生成带自动版本号的静态页面..."
+"$NODE_BIN" "$REPO_DIR/scripts/render-static.mjs" 2>&1 | tee -a "$LOG_FILE"
+
+CURRENT_H5_BUILD="$(cat "$H5_BUILD_STAMP" 2>/dev/null || echo '')"
+if echo "$CHANGED_FILES" | grep -q '^uniapp/'; then
+  log "检测到 uniapp/ 代码变更，构建 H5 版本..."
+  build_uniapp_h5
+elif [ ! -d "$REPO_DIR/uniapp/dist/build/h5" ] || [ "$CURRENT_H5_BUILD" != "$CURRENT_HEAD" ]; then
+  log "检测到 H5 构建产物缺失或提交标记不匹配，执行补构建..."
+  build_uniapp_h5
 else
   log "无 uniapp/ 变更，跳过 H5 构建"
 fi

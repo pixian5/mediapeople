@@ -154,10 +154,12 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 ```text
 1. git pull origin master
 2. 运行 scripts/render-static.mjs，生成 dist/*.html
-3. 如 uniapp/ 有变化，构建 H5
+3. 如 uniapp/ 有变化，或服务器现有 H5 产物不是当前提交构建的，自动构建/补构建 H5
 4. 如 server/ 有变化，重建 API 容器
 5. 重启前端 Nginx 容器
 ```
+
+uniapp H5 构建成功后，服务器会在 `uniapp/dist/build/h5/.build-commit` 写入当前提交号。即使上一次部署中途失败，只要这个标记与当前 Git 提交不一致，下一次部署也会自动补构建，不会再出现“代码已更新但会员端还是旧 H5 包”的情况。
 
 确认服务器版本：
 
