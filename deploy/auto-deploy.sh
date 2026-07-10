@@ -113,10 +113,14 @@ else
   log "无 server/ 变更，前端文件通过 volume 挂载已更新"
 fi
 
-# 重建 SSL version API（若有必要）
+# 重建 SSL version API / Nginx 容器（若有必要）。compose 配置变更必须 recreate，restart 不会应用 extra_hosts/ports 等容器配置。
 if docker ps --format '{{.Names}}' | grep -q 'mediapeople-web-ssl'; then
-  if echo "$CHANGED_FILES" | grep -q '^server/'; then
-    docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" up -d \
+  if echo "$CHANGED_FILES" | grep -Eq '^(server/|compose\.ssl\.yml|deploy/nginx-ssl\.conf)'; then
+    SSL_RECREATE_ARGS=""
+    if echo "$CHANGED_FILES" | grep -Eq '^(compose\.ssl\.yml|deploy/nginx-ssl\.conf)'; then
+      SSL_RECREATE_ARGS="--force-recreate"
+    fi
+    docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" up -d $SSL_RECREATE_ARGS \
       web-ssl web-mini-ssl web-matchmaker-ssl web-admin-ssl 2>&1 | tee -a "$LOG_FILE"
   fi
 fi
