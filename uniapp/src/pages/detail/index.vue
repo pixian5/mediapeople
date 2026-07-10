@@ -99,29 +99,28 @@ const handleMatchmakerChange = (event) => {
 };
 
 const handleMatchRequest = async () => {
+  if (requesting.value) return;
   if (!userStore.isLoggedIn) {
     uni.navigateTo({ url: '/pages/login/index' });
     return;
   }
-  if (!userStore.profile) {
-    await userStore.fetchProfile();
+  requesting.value = true;
+  try {
+    if (!userStore.profile) {
+      await userStore.fetchProfile();
+    }
+    if (!selectedMatchmaker.value) {
+      uni.showToast({ title: '该会员暂未绑定红娘', icon: 'none' });
+      return;
+    }
+    await submitMatchRequest(!isVipForSelectedMatchmaker.value);
+  } finally {
+    requesting.value = false;
   }
-  if (!selectedMatchmaker.value) {
-    uni.showToast({ title: '该会员暂未绑定红娘', icon: 'none' });
-    return;
-  }
-
-  if (!isVipForSelectedMatchmaker.value) {
-    await submitMatchRequest(true);
-    return;
-  }
-
-  await submitMatchRequest(false);
 };
 
 const submitMatchRequest = async (needRedeemVip) => {
-  if (!selectedMatchmaker.value || requesting.value) return;
-  requesting.value = true;
+  if (!selectedMatchmaker.value) return;
   try {
     if (needRedeemVip) {
       await redeemVipApi({ referralCode: selectedMatchmaker.value.code });
@@ -134,8 +133,6 @@ const submitMatchRequest = async (needRedeemVip) => {
     uni.showToast({ title: '申请成功', icon: 'success' });
   } catch (error) {
     // handled by request interceptor
-  } finally {
-    requesting.value = false;
   }
 };
 </script>
@@ -146,30 +143,35 @@ const submitMatchRequest = async (needRedeemVip) => {
 .detail-container {
   min-height: 100vh;
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 0%, rgba(15, 118, 110, 0.08), transparent 34%),
+    $color-bg;
 }
 
 .photo-section {
   position: relative;
   width: 100%;
-  height: 600rpx;
-  
+  height: 430rpx;
+  overflow: hidden;
+  background: linear-gradient(135deg, #dfe8eb 0%, #f8fbfb 100%);
+
   .main-photo {
     width: 100%;
     height: 100%;
   }
-  
+
   .photo-mask {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 200rpx;
+    height: 180rpx;
     background: linear-gradient(to bottom, rgba(238,242,245,0), rgba(238,242,245,1));
   }
 }
 
 .info-card {
-  margin: -40rpx $spacing-md $spacing-md;
+  margin: 0 $spacing-md $spacing-md;
   background: $color-panel;
   border-radius: $radius-md;
   padding: $spacing-md;
@@ -178,7 +180,7 @@ const submitMatchRequest = async (needRedeemVip) => {
   box-shadow: $shadow-card;
   
   &.basic-info {
-    margin-top: -80rpx;
+    margin-top: -64rpx;
   }
 
   .header {
@@ -250,5 +252,15 @@ const submitMatchRequest = async (needRedeemVip) => {
   padding: $spacing-sm $spacing-md;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
   z-index: 10;
+}
+
+@media screen and (min-width: 520px) {
+  .bottom-action {
+    left: 50%;
+    right: auto;
+    width: 430px;
+    box-sizing: border-box;
+    transform: translateX(-50%);
+  }
 }
 </style>
