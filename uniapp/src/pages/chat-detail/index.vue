@@ -214,8 +214,10 @@ const handleSend = async () => {
 .chat-detail-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 44px);
+  height: calc(100dvh - 44px);
+  max-height: calc(100dvh - 44px);
   overflow: hidden;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at 20% 0%, rgba(15, 118, 110, 0.08), transparent 34%),
     linear-gradient(180deg, #f8fbfb 0%, $color-bg 100%);
@@ -226,6 +228,7 @@ const handleSend = async () => {
   min-height: 0;
   padding: $spacing-lg $spacing-md;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .chat-empty {
@@ -315,6 +318,7 @@ const handleSend = async () => {
   align-items: center;
   gap: $spacing-sm;
   padding: $spacing-sm $spacing-md;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.94);
   border-top: 1rpx solid rgba(223, 229, 236, 0.9);
   box-shadow: 0 -12rpx 36rpx rgba(30, 38, 51, 0.06);

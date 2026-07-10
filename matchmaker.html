@@ -106,8 +106,8 @@
     </div>
 
   <!-- 红娘专属聊天模态弹窗 (Matchmaker Chat Modal) -->
-  <div class="modal-backdrop" id="matchmakerChatPanel" style="display: none;">
-    <div class="modal-content" style="max-width: 550px; display: flex; flex-direction: column; height: 80vh; max-height: 600px;">
+  <div class="modal-backdrop matchmaker-chat-modal" id="matchmakerChatPanel" style="display: none;">
+    <div class="modal-content matchmaker-chat-modal__content">
       <div class="modal-header" style="border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 8px;">
         <div>
           <h2 id="matchmakerChatTitle" style="margin: 0; font-size: 18px;">聊天窗口</h2>
@@ -115,9 +115,9 @@
         </div>
         <button class="modal-close" id="closeMatchmakerChatModalBtn" type="button">&times;</button>
       </div>
-      <div id="matchmakerChatEmpty" class="request-card muted" style="flex: 1; display: flex; align-items: center; justify-content: center; margin: 0;">还没有聊天消息。</div>
-      <div id="matchmakerChatMessages" class="contact-panel" style="flex: 1; overflow-y: auto; flex-direction: column; gap: 12px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); margin-bottom: 8px;"></div>
-      <form id="matchmakerChatForm" class="stack-form" style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: auto;">
+      <div id="matchmakerChatEmpty" class="request-card muted matchmaker-chat-modal__empty">还没有聊天消息。</div>
+      <div id="matchmakerChatMessages" class="contact-panel matchmaker-chat-modal__messages"></div>
+      <form id="matchmakerChatForm" class="stack-form matchmaker-chat-modal__form">
         <input id="matchmakerChatInput" placeholder="输入消息" style="margin-bottom: 0;" />
         <button class="primary-button" type="submit" style="min-height: 40px; margin-bottom: 0; width: 80px;">发送</button>
       </form>
