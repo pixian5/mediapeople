@@ -16,7 +16,15 @@
     </scroll-view>
     
     <view class="input-bar safe-area-bottom">
-      <input class="msg-input" v-model="inputText" placeholder="发送消息" @confirm="handleSend" confirm-type="send" />
+      <input
+        ref="messageInputRef"
+        class="msg-input"
+        v-model="inputText"
+        :focus="inputFocused"
+        placeholder="发送消息"
+        @confirm="handleSend"
+        confirm-type="send"
+      />
       <button class="btn-send" @click="handleSend" :class="{ disabled: !inputText || sending }">发送</button>
     </view>
   </view>
@@ -37,6 +45,8 @@ const sending = ref(false);
 const loading = ref(true);
 const scrollToId = ref('');
 const scrollTop = ref(0);
+const inputFocused = ref(false);
+const messageInputRef = ref(null);
 const tempMessageIds = ref(new Set());
 let pollTimer = null;
 
@@ -57,6 +67,7 @@ onShow(() => {
   ensureChatSocket();
   syncLatestMessages(true);
   startPolling();
+  restoreInputFocus();
 });
 
 onHide(() => {
@@ -173,6 +184,18 @@ const formatTime = (dateStr) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+const restoreInputFocus = () => {
+  inputFocused.value = false;
+  nextTick(() => {
+    inputFocused.value = true;
+    nextTick(() => {
+      if (typeof messageInputRef.value?.focus === 'function') {
+        messageInputRef.value.focus();
+      }
+    });
+  });
+};
+
 const handleSend = async () => {
   if (!inputText.value || sending.value) return;
   const content = inputText.value;
@@ -190,6 +213,7 @@ const handleSend = async () => {
   messages.value.push(tempMessage);
   inputText.value = '';
   scrollToBottom();
+  restoreInputFocus();
   
   try {
     const res = await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId });
@@ -204,6 +228,7 @@ const handleSend = async () => {
     uni.showToast({ title: '发送失败', icon: 'none' });
   } finally {
     sending.value = false;
+    restoreInputFocus();
   }
 };
 </script>

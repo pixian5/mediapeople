@@ -1880,6 +1880,18 @@ function renderRequests() {
   renderMiniChatSections(user, requests);
 }
 
+function refocusInputAfterRender(selector) {
+  requestAnimationFrame(() => {
+    const input = $(selector);
+    if (!input) return;
+    input.focus();
+    if (typeof input.setSelectionRange === "function") {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
+  });
+}
+
 function renderMiniChatSections(user, requests) {
   const threadList = $("#memberChatThreadsList");
   const mutualList = $("#memberMutualChatList");
@@ -2761,6 +2773,7 @@ async function sendMiniChatMessage(event) {
   upsertChatMessage(tempMessage);
   input.value = "";
   renderAll();
+  refocusInputAfterRender("#miniChatInput");
 
   if (apiAvailable) {
     try {
@@ -2779,10 +2792,12 @@ async function sendMiniChatMessage(event) {
       upsertChatMessage(data.message);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
+      refocusInputAfterRender("#miniChatInput");
     } catch (err) {
       removeMessageById(tempMessage.id);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
+      refocusInputAfterRender("#miniChatInput");
       console.warn("API send mini chat failed, fallback to local:", err);
       showToast("操作失败：" + err.message);
       return;
@@ -2792,6 +2807,7 @@ async function sendMiniChatMessage(event) {
     appendLocalMessage(thread.id, "client", user.id, content);
     saveState();
     renderAll();
+    refocusInputAfterRender("#miniChatInput");
   }
 }
 
@@ -2839,6 +2855,7 @@ async function sendMatchmakerChatMessage(event) {
   upsertChatMessage(tempMessage);
   input.value = "";
   renderAll();
+  refocusInputAfterRender("#matchmakerChatInput");
 
   if (apiAvailable) {
     try {
@@ -2857,10 +2874,12 @@ async function sendMatchmakerChatMessage(event) {
       upsertChatMessage(data.message);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
+      refocusInputAfterRender("#matchmakerChatInput");
     } catch (err) {
       removeMessageById(tempMessage.id);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
+      refocusInputAfterRender("#matchmakerChatInput");
       console.warn("API send matchmaker chat failed, fallback to local:", err);
       showToast("操作失败：" + err.message);
       return;
@@ -2870,6 +2889,7 @@ async function sendMatchmakerChatMessage(event) {
     appendLocalMessage(thread.id, "matchmaker", matchmaker.id, content);
     saveState();
     renderAll();
+    refocusInputAfterRender("#matchmakerChatInput");
   }
 }
 
