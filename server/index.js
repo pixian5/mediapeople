@@ -1773,9 +1773,11 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // 先锁住线程行，确保同一线程的消息插入串行化，避免新线程（无消息）时seq重复
+    await client.query("select id from chat_threads where id = $1 for update", [threadId]);
     
     const seqRes = await client.query(
-      "select coalesce(max((raw->>'seq')::int), 0) as max_seq from chat_messages where thread_id = $1 for update",
+      "select coalesce(max((raw->>'seq')::int), 0) as max_seq from chat_messages where thread_id = $1",
       [threadId]
     );
     const nextSeq = (seqRes.rows[0]?.max_seq || 0) + 1;
