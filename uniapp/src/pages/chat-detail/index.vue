@@ -263,7 +263,7 @@ const handleSend = async () => {
   restoreInputFocus();
 
   try {
-    const res = await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId, clientMsgNo });
+    const res = await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId, clientMsgNo, createdAt: tempMessage.createdAt });
     const realMessage = res.message || res.data?.message;
     if (realMessage) {
       if (!realMessage.clientMsgNo) {

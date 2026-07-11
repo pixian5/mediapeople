@@ -2796,7 +2796,7 @@ async function sendMiniChatMessage(event) {
       const res = await fetch(`${API_BASE}/chat/threads/${thread.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content, createdAt: tempMessage.createdAt })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -2878,7 +2878,7 @@ async function sendMatchmakerChatMessage(event) {
       const res = await fetch(`${API_BASE}/chat/threads/${thread.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content, createdAt: tempMessage.createdAt })
       });
       if (!res.ok) {
         const err = await res.json();

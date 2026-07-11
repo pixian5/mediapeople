@@ -1758,6 +1758,7 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
   const threadId = request.params.id;
   const content = String(request.body?.content || "").trim();
   const clientMsgNo = request.body?.clientMsgNo || null;
+  const clientCreatedAt = request.body?.createdAt || null;
   if (!content) return response.status(400).json({ error: "content_required" });
 
   const threadRes = await pool.query("select raw from chat_threads where id = $1", [threadId]);
@@ -1790,7 +1791,7 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
       senderRole: request.user.role,
       senderId: request.user.sub,
       content,
-      createdAt: new Date().toISOString(),
+      createdAt: clientCreatedAt || new Date().toISOString(),
     };
     if (clientMsgNo) {
       message.clientMsgNo = clientMsgNo;
