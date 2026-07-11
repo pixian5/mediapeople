@@ -1767,28 +1767,48 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
     if (!req?.memberChatEnabled) return response.status(403).json({ error: "member_chat_disabled" });
   }
 
-  const message = {
-    id: `cm${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
-    threadId,
-    senderRole: request.user.role,
-    senderId: request.user.sub,
-    content,
-    createdAt: new Date().toISOString(),
-  };
-  thread.lastMessageAt = message.createdAt;
-  thread.lastMessagePreview = content.slice(0, 80);
-
-  await pool.query(
-    "insert into chat_messages (id, thread_id, sender_role, sender_id, content, created_at, raw) values ($1, $2, $3, $4, $5, $6, $7::jsonb)",
-    [message.id, message.threadId, message.senderRole, message.senderId, message.content, message.createdAt, JSON.stringify(message)]
-  );
-  await pool.query(
-    "update chat_threads set raw = $1, updated_at = now() where id = $2",
-    [JSON.stringify(thread), threadId]
-  );
-
-  broadcastChatMessage(thread, message);
-  response.status(201).json({ message, thread });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    
+    const seqRes = await client.query(
+      "select coalesce(max((raw->>'seq')::int), 0) as max_seq from chat_messages where thread_id = $1 for update",
+      [threadId]
+    );
+    const nextSeq = (seqRes.rows[0]?.max_seq || 0) + 1;
+    
+    const message = {
+      id: `cm${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
+      threadId,
+      seq: nextSeq,
+      senderRole: request.user.role,
+      senderId: request.user.sub,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+    thread.lastMessageAt = message.createdAt;
+    thread.lastMessagePreview = content.slice(0, 80);
+  
+    await client.query(
+      "insert into chat_messages (id, thread_id, sender_role, sender_id, content, created_at, raw) values ($1, $2, $3, $4, $5, $6, $7::jsonb)",
+      [message.id, message.threadId, message.senderRole, message.senderId, message.content, message.createdAt, JSON.stringify(message)]
+    );
+    await client.query(
+      "update chat_threads set raw = $1, updated_at = now() where id = $2",
+      [JSON.stringify(thread), threadId]
+    );
+    
+    await client.query("COMMIT");
+    client.release();
+    
+    broadcastChatMessage(thread, message);
+    response.status(201).json({ message, thread });
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
+    client.release();
+    console.error("发送消息失败:", error);
+    response.status(500).json({ error: "send_failed" });
+  }
 });
 
 // 6. 管理员：添加机构
@@ -2232,9 +2252,13 @@ app.get("/api/client/chat/threads/:id/messages", requireAuth(["client"]), async 
       return response.status(403).json({ code: 403, message: "无权访问该聊天线程" });
     }
 
-    // 查询该线程的所有消息，按时间正序
+    // 查询该线程的所有消息，按 seq 正序（旧数据无 seq 时回退到 created_at）
     const msgRes = await pool.query(
-      "SELECT raw FROM chat_messages WHERE thread_id = $1 ORDER BY created_at ASC",
+      `SELECT raw FROM chat_messages 
+       WHERE thread_id = $1 
+       ORDER BY 
+         CASE WHEN raw ? 'seq' THEN (raw->>'seq')::int ELSE NULL END ASC NULLS FIRST,
+         created_at ASC`,
       [threadId],
     );
 

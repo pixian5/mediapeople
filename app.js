@@ -1186,11 +1186,18 @@ function upsertThread(threadPatch) {
   });
 }
 
+function compareChatMessages(a, b) {
+  if (a.seq != null && b.seq != null) return a.seq - b.seq;
+  if (a.seq != null) return -1;
+  if (b.seq != null) return 1;
+  return new Date(a.createdAt) - new Date(b.createdAt);
+}
+
 function upsertChatMessage(message) {
   if (!message?.id) return;
   removeMessageById(message.id);
   state.chatMessages.push(message);
-  state.chatMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  state.chatMessages.sort(compareChatMessages);
   const thread = getThreadById(message.threadId);
   if (thread) {
     thread.lastMessageAt = message.createdAt;

@@ -132,13 +132,20 @@ const syncLatestMessages = async (force = false) => {
   }
 };
 
+const compareMessages = (a, b) => {
+  if (a.seq != null && b.seq != null) return a.seq - b.seq;
+  if (a.seq != null) return -1;
+  if (b.seq != null) return 1;
+  return new Date(a.createdAt) - new Date(b.createdAt);
+};
+
 const mergeMessages = (newMessages) => {
   const tempIds = new Set(tempMessageIds.value);
   const serverIds = new Set(newMessages.map((msg) => msg.id));
   const pendingTempMessages = messages.value.filter((msg) => tempIds.has(msg.id) && !serverIds.has(msg.id));
   const merged = [...newMessages, ...pendingTempMessages];
 
-  merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  merged.sort(compareMessages);
   messages.value = merged.filter((msg, index, list) => list.findIndex((item) => item.id === msg.id) === index);
   tempMessageIds.value = new Set(pendingTempMessages.map((msg) => msg.id));
 };
@@ -163,7 +170,7 @@ const upsertMessage = (message) => {
   if (!message?.id) return;
   const nextMessages = messages.value.filter((msg) => msg.id !== message.id);
   nextMessages.push(message);
-  nextMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  nextMessages.sort(compareMessages);
   messages.value = nextMessages;
 };
 
@@ -208,8 +215,10 @@ const handleSend = async () => {
   
   const tempId = Date.now().toString();
   tempMessageIds.value.add(tempId);
+  const maxSeq = messages.value.reduce((max, msg) => msg.seq > max ? msg.seq : max, 0);
   const tempMessage = {
     id: tempId,
+    seq: maxSeq + 1,
     content,
     senderId: userStore.userId,
     senderRole: 'client',
