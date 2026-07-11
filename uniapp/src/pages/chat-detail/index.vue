@@ -26,7 +26,13 @@
         @confirm="handleSend"
         confirm-type="send"
       />
-      <button class="btn-send" @click="handleSend" :class="{ disabled: !canSend }">发送</button>
+      <button
+        class="btn-send"
+        :class="{ disabled: !canSend }"
+        @mousedown.prevent
+        @touchstart.prevent
+        @click="handleSend"
+      >发送</button>
     </view>
   </view>
 </template>
@@ -188,13 +194,21 @@ const formatTime = (dateStr) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-const restoreInputFocus = () => {
+const restoreInputFocus = (forceControlledFocus = false) => {
   if (isH5Runtime) {
-    nextTick(() => {
-      if (typeof messageInputRef.value?.focus === 'function') {
-        messageInputRef.value.focus();
-      }
-    });
+    if (forceControlledFocus) {
+      inputFocused.value = false;
+      nextTick(() => {
+        inputFocused.value = true;
+        if (typeof messageInputRef.value?.focus === 'function') {
+          messageInputRef.value.focus();
+        }
+      });
+      return;
+    }
+    if (typeof messageInputRef.value?.focus === 'function') {
+      messageInputRef.value.focus();
+    }
     return;
   }
   inputFocused.value = false;
@@ -229,7 +243,7 @@ const handleSend = async () => {
   messages.value.push(tempMessage);
   inputText.value = '';
   scrollToBottom();
-  restoreInputFocus();
+  restoreInputFocus(true);
   
   try {
     const res = await sendMessageApi(threadId.value, { content, senderRole: 'client', senderId: userStore.userId });
@@ -244,7 +258,6 @@ const handleSend = async () => {
     uni.showToast({ title: '发送失败', icon: 'none' });
   } finally {
     pendingSendCount.value = Math.max(0, pendingSendCount.value - 1);
-    restoreInputFocus();
   }
 };
 </script>
