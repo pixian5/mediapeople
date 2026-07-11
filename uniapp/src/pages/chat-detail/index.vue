@@ -134,10 +134,10 @@ const syncLatestMessages = async (force = false) => {
 };
 
 const compareMessages = (a, b) => {
+  const timeDiff = new Date(a.createdAt) - new Date(b.createdAt);
+  if (timeDiff !== 0) return timeDiff;
   if (a.seq != null && b.seq != null) return a.seq - b.seq;
-  if (a.seq != null) return 1;
-  if (b.seq != null) return -1;
-  return new Date(a.createdAt) - new Date(b.createdAt);
+  return 0;
 };
 
 const mergeMessages = (newMessages) => {
@@ -249,15 +249,9 @@ const handleSend = async () => {
   const tempId = `temp_${clientMsgNo}`;
   tempMessageIds.value.add(tempId);
 
-  const maxSeq = messages.value.reduce((max, msg) => {
-    if (msg.seq == null) return max;
-    return msg.seq > max ? msg.seq : max;
-  }, 0);
-
   const tempMessage = {
     id: tempId,
     clientMsgNo,
-    seq: maxSeq + 1,
     content,
     senderId: userStore.userId,
     senderRole: 'client',

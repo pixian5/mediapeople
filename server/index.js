@@ -703,10 +703,10 @@ async function readState() {
     pool.query("select raw from users order by id"),
     pool.query("select raw from match_requests order by raw->>'createdAt' desc, id"),
     pool.query("select raw from chat_threads order by coalesce(raw->>'lastMessageAt', raw->>'createdAt') desc, id"),
-    pool.query(`select raw from chat_messages 
-       order by 
-         case when raw ? 'seq' then (raw->>'seq')::int else null end asc nulls first,
-         created_at asc, id`),
+    pool.query(`select raw from chat_messages
+       order by created_at asc,
+         case when raw ? 'seq' then (raw->>'seq')::int else null end asc nulls last,
+         id`),
     pool.query("select raw from deals order by raw->>'createdAt' desc, id"),
     pool.query("select raw from promo_codes order by code"),
     pool.query("select data from app_settings where id = 'runtime'"),
@@ -2262,13 +2262,12 @@ app.get("/api/client/chat/threads/:id/messages", requireAuth(["client"]), async 
       return response.status(403).json({ code: 403, message: "无权访问该聊天线程" });
     }
 
-    // 查询该线程的所有消息，按 seq 正序（旧数据无 seq 时回退到 created_at）
+    // 查询该线程的所有消息，按 created_at 优先排序，seq 作为同时间戳的 tiebreaker
     const msgRes = await pool.query(
       `SELECT raw FROM chat_messages 
        WHERE thread_id = $1 
-       ORDER BY 
-         CASE WHEN raw ? 'seq' THEN (raw->>'seq')::int ELSE NULL END ASC NULLS FIRST,
-         created_at ASC`,
+       ORDER BY created_at ASC,
+         CASE WHEN raw ? 'seq' THEN (raw->>'seq')::int ELSE NULL END ASC NULLS LAST`,
       [threadId],
     );
 
