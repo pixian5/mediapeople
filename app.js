@@ -982,10 +982,17 @@ function getMatchmakerGroupThreadForRequest(requestId) {
   ) || null;
 }
 
+function compareChatMessages(a, b) {
+  if (a.seq != null && b.seq != null) return a.seq - b.seq;
+  if (a.seq != null) return -1;
+  if (b.seq != null) return 1;
+  return new Date(a.createdAt) - new Date(b.createdAt);
+}
+
 function getThreadMessages(threadId) {
   return state.chatMessages
     .filter((message) => message.threadId === threadId)
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    .sort(compareChatMessages);
 }
 
 function threadHasParticipant(thread, role, id) {
@@ -1184,13 +1191,6 @@ function upsertThread(threadPatch) {
     ...state.chatThreads[existingIndex],
     ...threadPatch,
   });
-}
-
-function compareChatMessages(a, b) {
-  if (a.seq != null && b.seq != null) return a.seq - b.seq;
-  if (a.seq != null) return -1;
-  if (b.seq != null) return 1;
-  return new Date(a.createdAt) - new Date(b.createdAt);
 }
 
 function upsertChatMessage(message) {

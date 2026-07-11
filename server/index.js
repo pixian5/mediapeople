@@ -703,7 +703,10 @@ async function readState() {
     pool.query("select raw from users order by id"),
     pool.query("select raw from match_requests order by raw->>'createdAt' desc, id"),
     pool.query("select raw from chat_threads order by coalesce(raw->>'lastMessageAt', raw->>'createdAt') desc, id"),
-    pool.query("select raw from chat_messages order by created_at asc, id"),
+    pool.query(`select raw from chat_messages 
+       order by 
+         case when raw ? 'seq' then (raw->>'seq')::int else null end asc nulls first,
+         created_at asc, id`),
     pool.query("select raw from deals order by raw->>'createdAt' desc, id"),
     pool.query("select raw from promo_codes order by code"),
     pool.query("select data from app_settings where id = 'runtime'"),
