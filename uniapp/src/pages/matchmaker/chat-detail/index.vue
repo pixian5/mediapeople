@@ -239,12 +239,16 @@ const formatTime = (dateStr) => {
 };
 
 const restoreInputFocus = () => {
+  if (isH5Runtime) {
+    nextTick(() => {
+      messageInputRef.value?.focus?.();
+    });
+    return;
+  }
+
   inputFocused.value = false;
   nextTick(() => {
     inputFocused.value = true;
-    if (isH5Runtime && typeof messageInputRef.value?.focus === 'function') {
-      messageInputRef.value.focus();
-    }
   });
 };
 
