@@ -10,6 +10,7 @@ mediapeople webhook server
 """
 
 import http.server
+import socketserver
 import hashlib
 import hmac
 import json
@@ -73,22 +74,28 @@ def verify_signature(body: bytes, signature: str) -> bool:
 def run_deploy():
     logger.info("开始执行部署脚本...")
     try:
+        # 直接继承 stdio，输出实时进入 journalctl + webhook 日志文件，避免 capture_output 把大量构建输出憋在内存
         result = subprocess.run(
             ["bash", DEPLOY_SCRIPT],
-            capture_output=True,
-            text=True,
-            timeout=300
+            timeout=300,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
         )
+        # 流式写出输出，避免在内存里堆积
+        try:
+            if result.stdout:
+                for line in result.stdout.split(b"\n"):
+                    sys.stdout.write(line.decode("utf-8", errors="replace") + "\n")
+                sys.stdout.flush()
+        except Exception:
+            pass
         if result.returncode == 0:
             logger.info("部署成功完成")
             # 成功通知由 auto-deploy.sh 的 trap 负责，避免重复
         else:
             logger.error(f"部署脚本退出码: {result.returncode}")
             # 失败通知由 auto-deploy.sh 的 trap 负责，避免重复
-        if result.stdout:
-            logger.info(f"stdout: {result.stdout.strip()}")
-        if result.stderr:
-            logger.warning(f"stderr: {result.stderr.strip()}")
     except subprocess.TimeoutExpired:
         logger.error("部署超时 (300s)")
         bark_notify("mediapeople 部署超时", "部署脚本执行超过 300s 被强制终止")
@@ -166,9 +173,14 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
 
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 if __name__ == "__main__":
-    server = http.server.HTTPServer(("0.0.0.0", PORT), WebhookHandler)
-    logger.info(f"Webhook 监听 http://127.0.0.1:{PORT}/webhook")
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), WebhookHandler)
+    logger.info(f"Webhook 监听 http://127.0.0.1:{PORT}/webhook (ThreadingHTTPServer)")
     logger.info(f"健康检查: http://127.0.0.1:{PORT}/health")
     logger.info(f"部署脚本: {DEPLOY_SCRIPT}")
     logger.info(f"Signature 验证: {'开启' if SECRET else '关闭 (未设置 WEBHOOK_SECRET)'}")
