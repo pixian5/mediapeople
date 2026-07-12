@@ -1,6 +1,6 @@
 # MatchMaker：客户小程序 + 红娘工作台 + 管理后台
 
-这是一个婚恋牵线业务原型，包含客户小程序端、红娘工作台、管理后台、Node/Express API、PostgreSQL 数据库和 Docker/Nginx 部署配置。
+这是一个婚恋牵线业务原型，包含真实 uniapp H5 客户端、红娘工作台、管理后台、Node/Express API、PostgreSQL 数据库和 Docker/Nginx 部署配置。
 
 当前项目是开发测试版。数据为演示数据，可以重构和清理旧数据，但每次修改后必须验证客户、红娘、后台三端主流程。用户已明确要求：本地只开发代码，不用本地网站测试；功能验证访问实际线上网站。
 
@@ -32,7 +32,7 @@ HTTP 入口主要用于服务器本机或临时排查：
 - 红娘端：登录/注册、查看牵线请求、联系男方、联系女方、开通/关闭双方会员沟通、与会员一对一聊天、审核会员资料。
 - 管理后台：登录、概览、分成比例、机构管理、红娘管理、客户信息、兑换码、模拟成交。
 - 服务激励：红娘可记录跟进、有效匹配和用户确认的稳定发展；用户评分、续费和结果奖励影响后续曝光与接单机会。
-- 前端静态页：`index.html`、`mini.html`、`matchmaker.html`、`admin.html`，由 `scripts/render-static.mjs` 生成带 Git 版本号的 `dist/*.html`。
+- 前端静态页：`index.html`、`matchmaker.html`、`admin.html`，由 `scripts/render-static.mjs` 生成带 Git 版本号的 `dist/*.html`；客户真实端由 `uniapp/` 构建 H5。
 - uniapp：`uniapp/` 目录包含 Vue3 + Vite + uniapp 版本，可构建 H5 和微信小程序。
 - 后端：`server/index.js`，Express + PostgreSQL。
 - 数据库：PostgreSQL 16 Docker 容器，服务器数据目录 `/opt/matchmaker/data/postgres`。
@@ -69,7 +69,6 @@ admin
 
 ```text
 index.html                      综合预览端模板
-mini.html                       客户小程序端模板
 matchmaker.html                 红娘工作台端模板
 admin.html                      管理后台端模板
 app.js                          静态前端业务逻辑

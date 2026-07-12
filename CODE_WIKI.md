@@ -45,10 +45,10 @@
 
 | 角色 | 入口文件 | HTTP 端口 | HTTPS 端口 | 核心功能 |
 |------|----------|-----------|------------|----------|
-| **客户（小程序端）** | [mini.html](file:///Users/x/code/matchmaker/mini.html) | 8096 | 9446 | 注册登录、资料维护、筛选异性、VIP 兑换、申请牵线、实时聊天 |
+| **客户（真实 H5）** | `uniapp/src/` | 8096 | 9446 | 注册登录、资料维护、服务订阅、申请牵线、实时聊天 |
 | **红娘（工作台）** | [matchmaker.html](file:///Users/x/code/matchmaker/matchmaker.html) | 8097 | 9447 | 注册登录、查看牵线通知、联系双方、查看微信、一对一聊天 |
 | **管理员（后台）** | [admin.html](file:///Users/x/code/matchmaker/admin.html) | 8098 | 9448 | 客户/红娘/机构管理、分成设置、兑换码管理、数据图表 |
-| **综合预览端** | [index.html](file:///Users/x/code/matchmaker/index.html) | 8095 | 9445 | 同一页面切换三端视角，用于演示 |
+| **综合预览端** | [index.html](file:///Users/x/code/matchmaker/index.html) | 8095 | 9445 | 红娘和管理后台预览；客户业务跳转真实 H5 |
 
 ### 1.4 仓库信息
 
@@ -134,7 +134,7 @@
 ```
 matchmaker/
 ├── index.html              综合预览端（8095/9445）
-├── mini.html               客户小程序端（8096/9446）
+├── uniapp/src/             真实客户 H5/微信小程序（8096/9446）
 ├── matchmaker.html         红娘工作台端（8097/9447）
 ├── admin.html              管理后台端（8098/9448）
 ├── app.js                  前端业务逻辑（约 3900 行）

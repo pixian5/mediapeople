@@ -4,9 +4,9 @@
 set -e
 
 echo "=== 1. 自动更新前端资源版本号 (Cache Busting) ==="
-node -e '
+node <<'NODE'
 const fs = require("fs");
-const files = ["admin.html", "index.html", "matchmaker.html", "mini.html", "readme.md"];
+const files = ["admin.html", "index.html", "matchmaker.html", "readme.md"];
 const content = fs.readFileSync("admin.html", "utf8");
 const match = content.match(/app\.js\?v=([^"'\s&]+)/);
 if (match) {
@@ -31,7 +31,7 @@ if (match) {
 } else {
   console.log("未找到版本号，跳过更新。");
 }
-'
+NODE
 echo ""
 
 echo "=== 2. 运行本地语法与配置检查 ==="

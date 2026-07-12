@@ -13,7 +13,7 @@ const version =
     encoding: "utf8",
   }).trim();
 
-const htmlFiles = ["index.html", "mini.html", "matchmaker.html", "admin.html"];
+const htmlFiles = ["index.html", "matchmaker.html", "admin.html"];
 
 await mkdir(distDir, { recursive: true });
 
