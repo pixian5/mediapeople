@@ -5,7 +5,11 @@
     <script>
       // 在 uniapp 路由初始化前保存深链接，避免未登录时丢失目标角色。
       (function captureInitialHash() {
+        try {
+          window.sessionStorage.removeItem('__MATCHMAKER_INITIAL_HASH__')
+        } catch (error) {}
         function capture() {
+          if (window.__MATCHMAKER_INITIAL_HASH__) return
           var hash = window.location.hash
           if (!hash.startsWith('#/pages/')) return
           window.__MATCHMAKER_INITIAL_HASH__ = hash
