@@ -2,7 +2,9 @@ const LEGACY_SESSION_KEY = "matchmaker_session";
 
 const INITIAL_HASH_PATH = (() => {
   try {
-    const initialHash = window.__MATCHMAKER_INITIAL_HASH__ || window.location.hash;
+    const initialHash = window.__MATCHMAKER_INITIAL_HASH__ ||
+      window.sessionStorage?.getItem("__MATCHMAKER_INITIAL_HASH__") ||
+      window.location.hash;
     const hashPath = initialHash.slice(1).split("?")[0];
     return hashPath.startsWith("/pages/") ? hashPath : "";
   } catch (error) {

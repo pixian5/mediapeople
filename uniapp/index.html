@@ -4,7 +4,18 @@
     <meta charset="UTF-8" />
     <script>
       // 在 uniapp 路由初始化前保存深链接，避免未登录时丢失目标角色。
-      window.__MATCHMAKER_INITIAL_HASH__ = window.location.hash
+      (function captureInitialHash() {
+        function capture() {
+          var hash = window.location.hash
+          if (!hash.startsWith('#/pages/')) return
+          window.__MATCHMAKER_INITIAL_HASH__ = hash
+          try {
+            window.sessionStorage.setItem('__MATCHMAKER_INITIAL_HASH__', hash)
+          } catch (error) {}
+        }
+        capture()
+        window.addEventListener('hashchange', capture, true)
+      })()
       var coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)') ||
         CSS.supports('top: constant(a)'))
       document.write(
