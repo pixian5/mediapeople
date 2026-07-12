@@ -22,12 +22,20 @@
             window.sessionStorage.setItem('__MATCHMAKER_INITIAL_HASH__', hash)
           } catch (error) {}
         }
+        function restoreCapturedRoute() {
+          var hash = window.__MATCHMAKER_INITIAL_HASH__
+          if (!hash || window.location.hash === hash || window.location.hash.startsWith(hash.split('?')[0])) return
+          window.location.hash = hash
+        }
         capture()
         window.addEventListener('hashchange', capture, true)
         window.addEventListener('DOMContentLoaded', capture, true)
         window.setTimeout(capture, 0)
         window.setTimeout(capture, 50)
         window.setTimeout(capture, 200)
+        window.setTimeout(restoreCapturedRoute, 0)
+        window.setTimeout(restoreCapturedRoute, 50)
+        window.setTimeout(restoreCapturedRoute, 200)
       })()
       var coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)') ||
         CSS.supports('top: constant(a)'))
