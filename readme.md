@@ -6,25 +6,16 @@
 
 ## 当前线上入口
 
-优先使用 HTTPS：
+统一使用 HTTPS 单端口：
 
 ```text
-综合预览端：https://uk.sbbz.tech:9445/
-客户小程序：https://uk.sbbz.tech:9446/
-红娘工作台：https://uk.sbbz.tech:9447/
-管理后台：https://uk.sbbz.tech:9448/
+统一入口：https://uk.sbbz.tech:21314/
+客户 H5：https://uk.sbbz.tech:21314/
+红娘端：https://uk.sbbz.tech:21314/pages/matchmaker/login/index
+管理后台：https://uk.sbbz.tech:21314/pages/admin/login/index
 ```
 
-HTTP 入口主要用于服务器本机或临时排查：
-
-```text
-综合预览端：http://uk.sbbz.tech:8095/
-客户小程序：http://uk.sbbz.tech:8096/
-红娘工作台：http://uk.sbbz.tech:8097/
-管理后台：http://uk.sbbz.tech:8098/
-```
-
-标准 443 端口当前由其它网关服务占用，本项目通过 9445-9448 提供 HTTPS。
+服务器仅对外暴露 `21314`，由单个 Nginx 网关复用 `/root/.acme.sh/sbbz.tech_ecc/` 下的现有证书。根目录挂载 uniapp H5 构建产物，客户、红娘和管理后台通过 uniapp 页面路由共用入口。
 
 ## 当前业务状态
 
@@ -77,10 +68,9 @@ server/index.js                 Express API
 scripts/render-static.mjs       静态 HTML 自动版本号生成脚本
 deploy/auto-deploy.sh           服务器自动拉 Git 并部署
 deploy/remote-deploy.sh         远程部署辅助脚本
-compose.yml                     HTTP 前端 + API + PostgreSQL
-compose.ssl.yml                 HTTPS 9445-9448 前端容器
-deploy/nginx.conf               HTTP Nginx 配置
-deploy/nginx-ssl.conf           HTTPS Nginx 配置
+compose.yml                     单端口 HTTPS 网关 + API + PostgreSQL
+compose.ssl.yml                 兼容旧命令的空 SSL 覆盖文件
+deploy/nginx-ssl.conf           单端口 HTTPS Nginx 配置
 uniapp/src/                     uniapp 源码
 说明/10-操作手册.md             当前最完整操作手册
 说明/16-业务逻辑审计与防错清单.md 权威业务逻辑与聊天防错规则
@@ -197,7 +187,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ### 客户端
 
-1. 打开 `https://uk.sbbz.tech:9446/`。
+1. 打开 `https://uk.sbbz.tech:21314/`。
 2. 登录林安。
 3. 进入“筛选”，选择孟晚棠。
 4. 选择红娘李莉。
@@ -207,7 +197,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ### 红娘端
 
-1. 打开 `https://uk.sbbz.tech:9447/`。
+1. 打开 `https://uk.sbbz.tech:21314/pages/matchmaker/login/index`。
 2. 登录李莉。
 3. 找到林安申请认识孟晚棠的请求。
 4. 点击“联系男方”。
@@ -226,7 +216,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ### 后台端
 
-1. 打开 `https://uk.sbbz.tech:9448/`。
+1. 打开 `https://uk.sbbz.tech:21314/pages/admin/login/index`。
 2. 输入 `admin` 登录。
 3. 检查概览、分成比例、机构管理、红娘管理、客户信息、兑换码。
 
@@ -235,14 +225,14 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 浏览器检查前可先确认 API：
 
 ```bash
-curl -sk https://uk.sbbz.tech:9446/api/health
+curl -sk https://uk.sbbz.tech:21314/api/health
 ```
 
 服务器本机检查：
 
 ```bash
 ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
-  'curl -s http://127.0.0.1:8096/api/health'
+  'curl -sk https://127.0.0.1:21314/api/health'
 ```
 
 正常：
@@ -278,7 +268,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ```bash
 ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
-  'cd /opt/matchmaker && docker compose -f compose.yml -f compose.ssl.yml restart web web-mini web-matchmaker web-admin web-ssl web-mini-ssl web-matchmaker-ssl web-admin-ssl'
+  'cd /opt/matchmaker && docker compose -f compose.yml -f compose.ssl.yml up -d --build --force-recreate --remove-orphans gateway'
 ```
 
 如果 Nginx 仍 502，常见原因是 API 容器重建后 Nginx 解析到旧容器 IP，重启前端 Nginx 容器即可刷新。

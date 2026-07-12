@@ -160,21 +160,12 @@ if echo "$CHANGED_FILES" | grep -q '^webhook/'; then
   touch /tmp/matchmaker-webhook-needs-restart
 fi
 
-# 重建 SSL version API / Nginx 容器（若有必要）。compose 配置变更必须 recreate，restart 不会应用 extra_hosts/ports 等容器配置。
-if docker ps --format '{{.Names}}' | grep -q 'matchmaker-web-ssl'; then
-  if echo "$CHANGED_FILES" | grep -Eq '^(server/|compose\.ssl\.yml|deploy/nginx-ssl\.conf)'; then
-    SSL_RECREATE_ARGS=""
-    if echo "$CHANGED_FILES" | grep -Eq '^(compose\.ssl\.yml|deploy/nginx-ssl\.conf)'; then
-      SSL_RECREATE_ARGS="--force-recreate"
-    fi
-    docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" up -d $SSL_RECREATE_ARGS \
-      web-ssl web-mini-ssl web-matchmaker-ssl web-admin-ssl 2>&1 | tee -a "$LOG_FILE"
-  fi
-fi
+# 单端口网关配置变更需要 recreate；--remove-orphans 会清理旧的多端口前端容器。
+log "正在部署单端口 HTTPS 网关（21314）并清理旧前端容器..."
+docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" up -d \
+  --build --force-recreate --remove-orphans gateway api postgres 2>&1 | tee -a "$LOG_FILE"
 
-log "正在重启 Nginx 容器以挂载最新文件并应用配置..."
-for container in web web-mini web-matchmaker web-admin web-ssl web-mini-ssl web-matchmaker-ssl web-admin-ssl; do
-  docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" restart $container 2>&1 | tee -a "$LOG_FILE" || true
-done
+log "正在检查网关配置..."
+docker exec matchmaker-gateway nginx -t 2>&1 | tee -a "$LOG_FILE"
 
 log "===== 部署完成 ====="

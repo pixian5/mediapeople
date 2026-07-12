@@ -80,27 +80,20 @@ echo "=== 6. 运行健康检查 ==="
 echo "等待 3 秒让服务启动..."
 sleep 3
 
-echo "检查 HTTP 端口 (8095-8098):"
-for port in 8095 8096 8097 8098; do
-  printf "  HTTP Port %s: " "$port"
-  status_code=$(curl -o /dev/null -s -w "%{http_code}" --max-time 5 http://uk.sbbz.tech:$port/api/health || echo "Failed")
-  if [ "$status_code" = "200" ]; then
-    echo "正常 (200)"
-  else
-    echo "异常 (HTTP $status_code)"
-  fi
-done
+echo "检查 HTTPS 单端口 21314："
+status_code=$(curl -k -o /dev/null -s -w "%{http_code}" --max-time 10 https://uk.sbbz.tech:21314/api/health || echo "Failed")
+if [ "$status_code" = "200" ]; then
+  echo "  API 正常 (200)"
+else
+  echo "  API 异常 (HTTP $status_code)"
+fi
 
-echo "检查 HTTPS 端口 (9445-9448):"
-for port in 9445 9446 9447 9448; do
-  printf "  HTTPS Port %s: " "$port"
-  status_code=$(curl -o /dev/null -s -w "%{http_code}" --max-time 5 https://uk.sbbz.tech:$port/api/health || echo "Failed")
-  if [ "$status_code" = "200" ]; then
-    echo "正常 (200)"
-  else
-    echo "异常 (HTTP $status_code)"
-  fi
-done
+root_status=$(curl -k -o /dev/null -s -w "%{http_code}" --max-time 10 https://uk.sbbz.tech:21314/ || echo "Failed")
+if [ "$root_status" = "200" ]; then
+  echo "  uniapp H5 根目录正常 (200)"
+else
+  echo "  uniapp H5 根目录异常 (HTTP $root_status)"
+fi
 echo ""
 
 echo "=== 部署与验证全部完成！ ==="
