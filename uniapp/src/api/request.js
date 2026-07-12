@@ -6,7 +6,7 @@
 import { getCurrentRole, readSession, removeSession } from "../utils/session";
 
 // 线上 API 域名（小程序 / App 等非 H5 平台需要完整 HTTPS 地址）
-const REMOTE_API_BASE = "https://uk.sbbz.tech:1314/api";
+const REMOTE_API_BASE = "https://uk.sbbz.tech:21314/api";
 
 // 根据平台自动切换 API 基础地址
 function getBaseUrl() {

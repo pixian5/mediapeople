@@ -1,5 +1,5 @@
 import { getCurrentRole, readSession } from "./session";
-const REMOTE_WS_HOST = "wss://uk.sbbz.tech:1314";
+const REMOTE_WS_HOST = "wss://uk.sbbz.tech:21314";
 const listeners = new Set();
 
 let socket = null;
