@@ -1,7 +1,7 @@
 <script setup>
 import { onLaunch, onShow } from "@dcloudio/uni-app";
 import { useUserStore } from "./store/user";
-import { getCurrentPagePath, getRoleForPath } from "./utils/session";
+import { getCurrentPagePath, getInitialPagePath, getRoleForPath } from "./utils/session";
 
 // 页面路径所属的角色前缀
 const MATCHMAKER_PAGES = "/pages/matchmaker/";
@@ -12,6 +12,7 @@ const ADMIN_LOGIN_PAGE = "/pages/admin/login/index";
 const CLIENT_HOME = "/pages/index/index";
 const MATCHMAKER_HOME = "/pages/matchmaker/workbench/index";
 const ADMIN_HOME = "/pages/admin/console/index";
+const INITIAL_PAGE_PATH = getInitialPagePath();
 
 function getPagePath() {
   return getCurrentPagePath();
@@ -41,8 +42,8 @@ function loginByPath(path) {
   return CLIENT_LOGIN_PAGE;
 }
 
-function checkRedirect(userStore) {
-  const path = getPagePath();
+function checkRedirect(userStore, requestedPath = getPagePath()) {
+  const path = requestedPath;
   const { isLoggedIn, role } = userStore;
 
   // 未登录：只允许停留在登录页
@@ -61,10 +62,10 @@ function checkRedirect(userStore) {
 onLaunch(() => {
   // 启动时恢复登录态
   const userStore = useUserStore();
-  userStore.restoreSession(getRoleForPath(getPagePath()));
+  userStore.restoreSession(getRoleForPath(INITIAL_PAGE_PATH || getPagePath()));
   // 延迟执行角色页面校验，避免启动时页面栈为空
   setTimeout(() => {
-    checkRedirect(userStore);
+    checkRedirect(userStore, INITIAL_PAGE_PATH || getPagePath());
   }, 0);
 });
 

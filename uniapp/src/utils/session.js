@@ -1,5 +1,14 @@
 const LEGACY_SESSION_KEY = "matchmaker_session";
 
+const INITIAL_HASH_PATH = (() => {
+  try {
+    const hashPath = window.location.hash.slice(1).split("?")[0];
+    return hashPath.startsWith("/pages/") ? hashPath : "";
+  } catch (error) {
+    return "";
+  }
+})();
+
 export const SESSION_KEYS = {
   client: "matchmaker_session_client",
   matchmaker: "matchmaker_session_matchmaker",
@@ -30,6 +39,10 @@ export function getCurrentPagePath() {
   } catch (error) {
     return "";
   }
+}
+
+export function getInitialPagePath() {
+  return INITIAL_HASH_PATH;
 }
 
 export function getCurrentRole() {
