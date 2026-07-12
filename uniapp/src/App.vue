@@ -1,7 +1,7 @@
 <script setup>
 import { onLaunch, onShow } from "@dcloudio/uni-app";
 import { useUserStore } from "./store/user";
-import { getCurrentPagePath, getInitialPagePath, getRoleForPath } from "./utils/session";
+import { getCurrentPagePath, getInitialPagePath, getRoleForPath, redirectToPath } from "./utils/session";
 
 // 页面路径所属的角色前缀
 const MATCHMAKER_PAGES = "/pages/matchmaker/";
@@ -42,16 +42,6 @@ function loginByPath(path) {
   return CLIENT_LOGIN_PAGE;
 }
 
-function redirectTo(path) {
-  // H5 启动阶段 uni.reLaunch 可能早于 vue-router 就绪，回退到默认会员首页。
-  // 直接更新 hash 可确保角色入口不被默认首页覆盖。
-  if (typeof window !== "undefined" && window.location.hash !== `#${path}`) {
-    window.location.hash = `#${path}`;
-    return;
-  }
-  uni.reLaunch({ url: path });
-}
-
 function checkRedirect(userStore, requestedPath = getPagePath()) {
   const path = requestedPath;
   const { isLoggedIn, role } = userStore;
@@ -59,13 +49,13 @@ function checkRedirect(userStore, requestedPath = getPagePath()) {
   // 未登录：只允许停留在登录页
   if (!isLoggedIn) {
     if (!path || isLoginPage(path)) return;
-    redirectTo(loginByPath(path));
+    redirectToPath(loginByPath(path));
     return;
   }
 
   // 已登录：角色与当前页面不匹配则重定向到对应首页
   if (path && !belongsToRole(path, role)) {
-    redirectTo(redirectByRole(role));
+    redirectToPath(redirectByRole(role));
   }
 }
 

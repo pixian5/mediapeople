@@ -3,7 +3,7 @@
  * 自动挂载 Token、统一错误处理、基础地址切换
  */
 
-import { getCurrentRole, readSession, removeSession } from "../utils/session";
+import { getCurrentRole, readSession, removeSession, redirectToPath } from "../utils/session";
 
 // 线上 API 域名（小程序 / App 等非 H5 平台需要完整 HTTPS 地址）
 const REMOTE_API_BASE = "https://uk.sbbz.tech:21314/api";
@@ -99,7 +99,7 @@ export function request(options = {}) {
             if (session?.role === "admin") loginUrl = "/pages/admin/login/index";
             removeSession(getCurrentRole());
           } catch (e) {}
-          uni.reLaunch({ url: loginUrl });
+          redirectToPath(loginUrl);
           reject(new Error(msg));
           return;
         }

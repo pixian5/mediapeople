@@ -85,3 +85,11 @@ export function removeSession(role = getCurrentRole()) {
     // ignore storage errors
   }
 }
+
+export function redirectToPath(path) {
+  if (typeof window !== "undefined" && window.location.hash !== `#${path}`) {
+    window.location.hash = `#${path}`;
+    return;
+  }
+  uni.reLaunch({ url: path });
+}

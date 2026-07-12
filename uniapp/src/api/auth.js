@@ -2,7 +2,7 @@
  * 认证相关接口
  */
 import { post } from "./request";
-import { SESSION_KEYS } from "../utils/session";
+import { getCurrentRole, removeSession } from "../utils/session";
 
 // 客户端登录
 export const loginApi = (data) => post("/auth/client/login", data, { noAuth: true });
@@ -20,7 +20,6 @@ export const matchmakerRegisterApi = (data) => post("/auth/matchmaker/register",
 export const adminLoginApi = (data) => post("/auth/admin/login", data, { noAuth: true });
 
 // 登出（本地清除即可）
-export const logoutApi = () => {
-  Object.values(SESSION_KEYS).forEach((key) => uni.removeStorageSync(key));
-  uni.removeStorageSync("matchmaker_session");
+export const logoutApi = (role = getCurrentRole()) => {
+  removeSession(role);
 };

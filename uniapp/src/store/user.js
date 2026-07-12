@@ -4,7 +4,7 @@
  */
 import { defineStore } from "pinia";
 import { getMeApi } from "../api/client";
-import { getCurrentRole, getSessionKey, readSession, removeSession } from "../utils/session";
+import { getCurrentRole, getSessionKey, readSession, removeSession, redirectToPath } from "../utils/session";
 
 export const useUserStore = defineStore("user", {
   state: () => ({
@@ -237,7 +237,7 @@ export const useUserStore = defineStore("user", {
       let url = "/pages/login/index";
       if (role === "matchmaker") url = "/pages/matchmaker/login/index";
       if (role === "admin") url = "/pages/admin/login/index";
-      uni.reLaunch({ url });
+      redirectToPath(url);
     },
 
     // 更新 VIP 状态
