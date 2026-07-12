@@ -5,6 +5,9 @@
 
 const SESSION_KEY = "matchmaker_session";
 
+// 线上 API 域名（小程序 / App 等非 H5 平台需要完整 HTTPS 地址）
+const REMOTE_API_BASE = "https://uk.sbbz.tech:9446/api";
+
 // 根据平台自动切换 API 基础地址
 function getBaseUrl() {
   // #ifdef H5
@@ -12,12 +15,17 @@ function getBaseUrl() {
   return "/api";
   // #endif
 
-  // #ifdef MP-WEIXIN
+  // #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ || MP-KUAISHOU || MP-JD || MP-XHS || MP-LARK || MP-HARMONY
   // 小程序环境使用完整 HTTPS 域名
-  return "https://uk.sbbz.tech:9446/api";
+  return REMOTE_API_BASE;
   // #endif
 
-  // #ifndef H5 || MP-WEIXIN
+  // #ifdef APP-PLUS || APP || APP-HARMONY
+  // App 环境使用完整 HTTPS 域名
+  return REMOTE_API_BASE;
+  // #endif
+
+  // #ifndef H5 || MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ || MP-KUAISHOU || MP-JD || MP-XHS || MP-LARK || MP-HARMONY || APP-PLUS || APP || APP-HARMONY
   return "/api";
   // #endif
 }
@@ -60,11 +68,15 @@ export function request(options = {}) {
         const { statusCode, data: resData } = res;
 
         if (statusCode === 401) {
-          // Token 失效，清除登录态，跳转登录页
+          // Token 失效，清除登录态并按角色跳转登录页
+          let loginUrl = "/pages/login/index";
           try {
+            const session = uni.getStorageSync(SESSION_KEY);
+            if (session?.role === "matchmaker") loginUrl = "/pages/matchmaker/login/index";
+            if (session?.role === "admin") loginUrl = "/pages/admin/login/index";
             uni.removeStorageSync(SESSION_KEY);
           } catch (e) {}
-          uni.reLaunch({ url: "/pages/login/index" });
+          uni.reLaunch({ url: loginUrl });
           reject(new Error("登录已过期，请重新登录"));
           return;
         }
