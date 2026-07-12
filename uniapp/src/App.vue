@@ -34,6 +34,13 @@ function redirectByRole(role) {
   return CLIENT_HOME;
 }
 
+function loginByPath(path) {
+  const role = getRoleForPath(path);
+  if (role === "matchmaker") return MATCHMAKER_LOGIN_PAGE;
+  if (role === "admin") return ADMIN_LOGIN_PAGE;
+  return CLIENT_LOGIN_PAGE;
+}
+
 function checkRedirect(userStore) {
   const path = getPagePath();
   const { isLoggedIn, role } = userStore;
@@ -41,7 +48,7 @@ function checkRedirect(userStore) {
   // 未登录：只允许停留在登录页
   if (!isLoggedIn) {
     if (!path || isLoginPage(path)) return;
-    uni.reLaunch({ url: CLIENT_LOGIN_PAGE });
+    uni.reLaunch({ url: loginByPath(path) });
     return;
   }
 
