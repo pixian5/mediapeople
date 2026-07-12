@@ -78,6 +78,19 @@ export function request(options = {}) {
         const { statusCode, data: resData } = res;
 
         if (statusCode === 401) {
+          const msg = getFriendlyErrorMessage(
+            resData?.message || resData?.error,
+            "登录已过期，请重新登录"
+          );
+
+          // 登录/注册等 noAuth 请求的 401 是业务校验失败，不能按
+          // “已有会话过期”处理，否则会重新加载登录页并清掉页面错误提示。
+          if (noAuth) {
+            uni.showToast({ title: msg, icon: "none" });
+            reject(new Error(msg));
+            return;
+          }
+
           // Token 失效，清除登录态并按角色跳转登录页
           let loginUrl = "/pages/login/index";
           try {
@@ -87,7 +100,7 @@ export function request(options = {}) {
             uni.removeStorageSync(SESSION_KEY);
           } catch (e) {}
           uni.reLaunch({ url: loginUrl });
-          reject(new Error("登录已过期，请重新登录"));
+          reject(new Error(msg));
           return;
         }
 
