@@ -74,14 +74,22 @@ def verify_signature(body: bytes, signature: str) -> bool:
 def run_deploy():
     logger.info("开始执行部署脚本...")
     try:
-        # 直接继承 stdio，输出实时进入 journalctl + webhook 日志文件，避免 capture_output 把大量构建输出憋在内存
+        # 拷贝脚本到临时文件，避免 git pull 更新原文件导致 bash trap 失效
+        import tempfile, shutil
+        tmp_script = tempfile.NamedTemporaryFile(suffix=".sh", delete=False, mode="w")
+        shutil.copy2(DEPLOY_SCRIPT, tmp_script.name)
+        tmp_script.close()
         result = subprocess.run(
-            ["bash", DEPLOY_SCRIPT],
+            ["bash", tmp_script.name],
             timeout=300,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=False,
         )
+        try:
+            os.unlink(tmp_script.name)
+        except Exception:
+            pass
         # 流式写出输出，避免在内存里堆积
         try:
             if result.stdout:

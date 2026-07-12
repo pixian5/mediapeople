@@ -89,7 +89,11 @@ const server = http.createServer((req, res) => {
     res.end("OK");
 
     deploying = true;
-    exec(`bash ${DEPLOY_SCRIPT}`, { timeout: 300000 }, (error, stdout, stderr) => {
+    // 拷贝脚本到临时文件，避免 git pull 更新原文件导致 bash trap 失效
+    const tmpScript = `/tmp/auto-deploy-${Date.now()}.sh`;
+    try { fs.copyFileSync(DEPLOY_SCRIPT, tmpScript); } catch (e) { log(`复制脚本失败: ${e.message}`); }
+    exec(`bash ${tmpScript}`, { timeout: 300000 }, (error, stdout, stderr) => {
+      try { fs.unlinkSync(tmpScript); } catch {}
       deploying = false;
       if (error) {
         if (error.killed) {
