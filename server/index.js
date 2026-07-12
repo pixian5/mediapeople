@@ -8,6 +8,36 @@ const { Pool } = pg;
 const PORT = Number(process.env.PORT || 3000);
 const TOKEN_SECRET = process.env.JWT_SECRET || process.env.ADMIN_API_TOKEN || "matchmaker-dev-secret-change-me";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+const SERVICE_PRICE = 399;
+const SERVICE_DAYS = 30;
+const WEEKLY_MATCH_LIMIT = 5;
+const WEEKLY_FOLLOWUP_LIMIT = 5;
+
+function serviceWeekKey(date = new Date()) {
+  const value = new Date(date);
+  const day = value.getUTCDay() || 7;
+  value.setUTCDate(value.getUTCDate() - day + 1);
+  return value.toISOString().slice(0, 10);
+}
+
+function createServicePlan(start = new Date()) {
+  const startsAt = new Date(start);
+  const expiresAt = new Date(startsAt.getTime() + SERVICE_DAYS * 24 * 60 * 60 * 1000);
+  return {
+    id: "weekly-5",
+    name: "每周 5 次人工牵线",
+    price: SERVICE_PRICE,
+    startsAt: startsAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    weeklyMatchLimit: WEEKLY_MATCH_LIMIT,
+    weeklyFollowupLimit: WEEKLY_FOLLOWUP_LIMIT,
+    weekKey: serviceWeekKey(),
+    weeklyMatchUsed: 0,
+    weeklyFollowupUsed: 0,
+    status: "active",
+    renewalMode: "manual",
+  };
+}
 
 // 敏感词列表（反欺诈：杀猪盘、引流、博彩、违规交易等）
 const SENSITIVE_WORDS = [
@@ -530,6 +560,23 @@ function ensureUserDefaults(user) {
     user.profileByMatchmaker = {};
   }
   user.vip = user.vip || user.vipMatchmakerIds.length > 0;
+  if (!user.servicePlan && user.vip) {
+    const expiresAt = user.vipExpiresAt ? new Date(user.vipExpiresAt) : new Date(Date.now() + SERVICE_DAYS * 24 * 60 * 60 * 1000);
+    user.servicePlan = createServicePlan(new Date(expiresAt.getTime() - SERVICE_DAYS * 24 * 60 * 60 * 1000));
+    user.servicePlan.expiresAt = expiresAt.toISOString();
+  }
+  if (user.servicePlan) {
+    const currentWeek = serviceWeekKey();
+    if (user.servicePlan.weekKey !== currentWeek) {
+      user.servicePlan.weekKey = currentWeek;
+      user.servicePlan.weeklyMatchUsed = 0;
+      user.servicePlan.weeklyFollowupUsed = 0;
+    }
+    user.servicePlan.weeklyMatchLimit ||= WEEKLY_MATCH_LIMIT;
+    user.servicePlan.weeklyFollowupLimit ||= WEEKLY_FOLLOWUP_LIMIT;
+    user.servicePlan.weeklyMatchUsed ||= 0;
+    user.servicePlan.weeklyFollowupUsed ||= 0;
+  }
   return user;
 }
 
@@ -1692,9 +1739,13 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
       return response.status(400).json({ error: "code_or_referral_code_required" });
     }
 
-    // 升级 VIP
+    // 开通 30 天服务订单：每周 5 次牵线 + 5 次人工跟进
     user.vip = true;
-    user.vipExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const currentExpiry = user.servicePlan?.expiresAt && new Date(user.servicePlan.expiresAt) > new Date()
+      ? new Date(user.servicePlan.expiresAt)
+      : new Date();
+    user.servicePlan = createServicePlan(currentExpiry);
+    user.vipExpiresAt = user.servicePlan.expiresAt.slice(0, 10);
     if (matchmakerId) upsertUserVipMatchmaker(user, matchmakerId);
     await client.query(
       "update users set vip = true, referral_matchmaker_id = $1, raw = $2, updated_at = now() where id = $3",
@@ -1706,12 +1757,12 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
     const deal = {
       id: dealId,
       requestId: null,
-      amount: 399,
+      amount: SERVICE_PRICE,
       createdAt: new Date().toISOString().slice(0, 10)
     };
     await client.query(
       "insert into deals (id, request_id, amount, created_at, raw) values ($1, $2, $3, $4, $5::jsonb)",
-      [dealId, null, 399, deal.createdAt, JSON.stringify(deal)]
+      [dealId, null, SERVICE_PRICE, deal.createdAt, JSON.stringify({ ...deal, servicePlan: user.servicePlan })]
     );
 
     await client.query("commit");
@@ -1735,6 +1786,13 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
   const fromUserRes = await pool.query("select raw from users where id = $1", [userId]);
   if (fromUserRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
   const fromUser = ensureUserDefaults(fromUserRes.rows[0].raw);
+
+  if (!fromUser.servicePlan || fromUser.servicePlan.status !== "active" || new Date(fromUser.servicePlan.expiresAt) <= new Date()) {
+    return response.status(402).json({ error: "service_plan_required", message: "请先购买有效的牵线服务包" });
+  }
+  if (fromUser.servicePlan.weeklyMatchUsed >= fromUser.servicePlan.weeklyMatchLimit) {
+    return response.status(429).json({ error: "weekly_match_quota_exhausted", message: "本周 5 次牵线额度已用完，下周自动恢复" });
+  }
 
   const toUserRes = await pool.query("select raw from users where id = $1", [targetUserId]);
   if (toUserRes.rows.length === 0) return response.status(404).json({ error: "target_not_found" });
@@ -1763,8 +1821,20 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
     maleContacted: false,
     femaleContacted: false,
     memberChatEnabled: false,
+    serviceStage: "待首次推荐",
+    followupCount: 0,
+    matchOutcome: null,
+    rewardLedger: {
+      effectiveMatch: 0,
+      followup: 0,
+      success: 0,
+      status: "pending",
+    },
     createdAt: new Date().toISOString()
   };
+
+  fromUser.servicePlan.weeklyMatchUsed += 1;
+  await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(fromUser), userId]);
 
   await pool.query(
     `insert into match_requests (id, from_user_id, to_user_id, matchmaker_id, status, created_at, raw)
@@ -1943,6 +2013,67 @@ app.patch("/api/matchmaker/requests/:id/member-chat", requireAuth(["matchmaker"]
     }
   }
 
+  response.json({ request: req, state: publicState(await readState()) });
+});
+
+// 红娘服务进度与奖励：奖励服务质量和用户确认的结果，不奖励拖延或隐瞒合适对象
+app.patch("/api/matchmaker/requests/:id/service-progress", requireAuth(["matchmaker"]), async (request, response) => {
+  const requestId = request.params.id;
+  const matchmakerId = request.user.sub;
+  const action = request.body?.action;
+  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
+  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
+  const req = ensureRequestDefaults(reqRes.rows[0].raw);
+  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
+
+  const fromRes = await pool.query("select raw from users where id = $1", [req.fromUserId]);
+  const customer = fromRes.rows[0] ? ensureUserDefaults(fromRes.rows[0].raw) : null;
+  if (!customer) return response.status(404).json({ error: "customer_not_found" });
+
+  req.rewardLedger ||= { effectiveMatch: 0, followup: 0, success: 0, status: "pending" };
+  if (action === "follow_up") {
+    if (!customer.servicePlan || customer.servicePlan.weeklyFollowupUsed >= customer.servicePlan.weeklyFollowupLimit) {
+      return response.status(429).json({ error: "weekly_followup_quota_exhausted", message: "用户本周跟进额度已用完" });
+    }
+    customer.servicePlan.weeklyFollowupUsed += 1;
+    req.followupCount = Number(req.followupCount || 0) + 1;
+    req.serviceStage = "红娘持续跟进中";
+    req.rewardLedger.followup = Number(req.rewardLedger.followup || 0) + 10;
+  } else if (action === "effective_match") {
+    req.serviceStage = "已完成有效匹配";
+    req.matchOutcome = "effective";
+    req.rewardLedger.effectiveMatch = 50;
+  } else if (action === "not_fit") {
+    req.serviceStage = "不合适，等待重新匹配";
+    req.matchOutcome = "not_fit";
+    if (!req.matchCreditReturned) {
+      customer.servicePlan.weeklyMatchUsed = Math.max(0, Number(customer.servicePlan.weeklyMatchUsed || 0) - 1);
+      req.matchCreditReturned = true;
+    }
+  } else {
+    return response.status(400).json({ error: "invalid_service_action" });
+  }
+
+  await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(customer), customer.id]);
+  await pool.query("update match_requests set raw = $1, updated_at = now() where id = $2", [JSON.stringify(req), requestId]);
+  response.json({ request: req, state: publicState(await readState()) });
+});
+
+// 成功奖励必须由会员本人确认，红娘不能单方面把普通牵线标记为脱单
+app.patch("/api/client/match-requests/:id/outcome", requireAuth(["client"]), async (request, response) => {
+  const requestId = request.params.id;
+  const outcome = request.body?.outcome;
+  if (outcome !== "stable_progress") return response.status(400).json({ error: "invalid_outcome" });
+  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
+  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
+  const req = ensureRequestDefaults(reqRes.rows[0].raw);
+  if (![req.fromUserId, req.toUserId].includes(request.user.sub)) return response.status(403).json({ error: "forbidden" });
+  req.rewardLedger ||= { effectiveMatch: 0, followup: 0, success: 0, status: "pending" };
+  req.serviceStage = "双方稳定发展（用户确认）";
+  req.matchOutcome = outcome;
+  req.rewardLedger.success = 150;
+  req.rewardLedger.status = "eligible";
+  await pool.query("update match_requests set raw = $1, updated_at = now() where id = $2", [JSON.stringify(req), requestId]);
   response.json({ request: req, state: publicState(await readState()) });
 });
 
