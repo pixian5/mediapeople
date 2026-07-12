@@ -173,6 +173,7 @@ onReachBottom(() => {
 
   .filter-input {
     flex: 1;
+    min-width: 0;
     height: 64rpx;
     background: $color-bg;
     border-radius: $radius-round;
@@ -181,6 +182,8 @@ onReachBottom(() => {
   }
 
   .filter-picker {
+    box-sizing: border-box;
+    flex: 0 0 auto;
     height: 64rpx;
     background: $color-bg;
     border-radius: $radius-round;
@@ -189,9 +192,19 @@ onReachBottom(() => {
     align-items: center;
     font-size: $font-sm;
     color: $color-ink;
+
+    .picker-value {
+      width: auto;
+      height: 64rpx;
+      padding: 0;
+      background: transparent;
+      border: none;
+      white-space: nowrap;
+    }
   }
 
   .btn-reset {
+    flex: 0 0 auto;
     font-size: $font-sm;
     color: $color-muted;
     background: none;

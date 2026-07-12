@@ -305,7 +305,7 @@ page {
   uni-page {
     max-width: 430px;
     margin: 0 auto;
-    overflow: hidden;
+    overflow: visible;
     background: $color-bg;
   }
 
