@@ -2913,6 +2913,34 @@ app.get("/api/client/chat/threads/:id/messages", requireAuth(["client"]), async 
   }
 });
 
+// 红娘/会员读取私聊或群聊消息。发送消息接口使用同一路径，读取也统一走通用线程权限校验。
+app.get("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"]), async (request, response) => {
+  try {
+    const threadId = request.params.id;
+    const threadRes = await pool.query("select raw from chat_threads where id = $1", [threadId]);
+    if (threadRes.rows.length === 0) {
+      return response.status(404).json({ code: 404, message: "聊天线程不存在" });
+    }
+
+    const thread = ensureThreadDefaults(threadRes.rows[0].raw);
+    if (!canAccessThread(thread, request.user)) {
+      return response.status(403).json({ code: 403, message: "无权访问该聊天线程" });
+    }
+
+    const msgRes = await pool.query(
+      `SELECT raw FROM chat_messages
+       WHERE thread_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [threadId],
+    );
+
+    response.json({ code: 0, data: { list: msgRes.rows.map((row) => row.raw) }, message: "ok" });
+  } catch (err) {
+    console.error(err);
+    response.status(500).json({ code: 500, message: "服务器内部错误" });
+  }
+});
+
 app.use((error, _request, response, _next) => {
   console.error(error);
   response.status(500).json({ error: "internal server error" });
