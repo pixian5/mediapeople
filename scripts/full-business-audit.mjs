@@ -213,7 +213,9 @@ await step("vip scoped visibility and match request", async () => {
   ids.requestId = created.data.request.id;
   const threads = created.data.state.chatThreads.filter((thread) => thread.requestId === ids.requestId);
   assert(threads.filter((thread) => thread.type === "member_matchmaker").length === 2, "missing 1v1 threads");
-  assert(!threads.some((thread) => thread.type === "matchmaker_group"), "group thread must wait for matchmaker approval");
+  // 根据《业务逻辑审计与防错清单》第六条，申请牵线时即应创建 matchmaker_group
+  assert(threads.filter((thread) => thread.type === "matchmaker_group").length === 1, "matchmaker_group must be created on request creation");
+  assert(created.data.request.groupThreadId, "groupThreadId missing in response");
 });
 
 await step("chat isolation and member chat gate", async () => {
