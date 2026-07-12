@@ -32,6 +32,16 @@ function getBaseUrl() {
 
 const BASE_URL = getBaseUrl();
 
+function getFriendlyErrorMessage(value, fallback) {
+  const messages = {
+    invalid_credentials: "账号或密码错误",
+    account_not_found: "账号不存在",
+    account_disabled: "账号已被停用",
+    unauthorized: "请先登录",
+  };
+  return messages[value] || value || fallback;
+}
+
 /**
  * 统一请求方法
  * @param {Object} options - 请求配置
@@ -88,7 +98,10 @@ export function request(options = {}) {
         }
 
         if (statusCode >= 400) {
-          const msg = resData?.message || resData?.error || `请求失败 (${statusCode})`;
+          const msg = getFriendlyErrorMessage(
+            resData?.message || resData?.error,
+            `请求失败 (${statusCode})`
+          );
           uni.showToast({ title: msg, icon: "none" });
           reject(new Error(msg));
           return;
@@ -101,7 +114,10 @@ export function request(options = {}) {
           if (resData.code === 0) {
             resolve(resData);
           } else {
-            const msg = resData.message || `请求失败 (${resData.code})`;
+            const msg = getFriendlyErrorMessage(
+              resData.message,
+              `请求失败 (${resData.code})`
+            );
             uni.showToast({ title: msg, icon: "none" });
             reject(new Error(msg));
           }
