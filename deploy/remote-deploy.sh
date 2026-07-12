@@ -16,4 +16,4 @@ if [ "$BRANCH" != "master" ]; then
   exit 1
 fi
 
-ssh $ssh_args "$REMOTE_HOST" "bash '$REMOTE_DEPLOY_SCRIPT'"
+ssh $ssh_args "$REMOTE_HOST" "cp '$REMOTE_DEPLOY_SCRIPT' /tmp/auto-deploy-\$\$.sh && bash /tmp/auto-deploy-\$\$.sh; rm -f /tmp/auto-deploy-\$\$.sh"

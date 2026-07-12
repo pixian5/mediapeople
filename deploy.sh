@@ -72,7 +72,7 @@ echo "✓ 代码推送成功！"
 echo ""
 
 echo "=== 5. 连接服务器并执行部署 ==="
-ssh -i ~/.ssh/mediapeople_uk_ed25519 -o StrictHostKeyChecking=accept-new root@uk.sbbz.tech "bash /opt/mediapeople/deploy/auto-deploy.sh"
+ssh -i ~/.ssh/mediapeople_uk_ed25519 -o StrictHostKeyChecking=accept-new root@uk.sbbz.tech "cp /opt/mediapeople/deploy/auto-deploy.sh /tmp/auto-deploy-\$\$.sh && bash /tmp/auto-deploy-\$\$.sh; rm -f /tmp/auto-deploy-\$\$.sh"
 echo "✓ 服务器部署指令执行完成！"
 echo ""
 

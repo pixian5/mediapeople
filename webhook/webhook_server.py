@@ -104,6 +104,22 @@ def run_deploy():
         else:
             logger.error(f"部署脚本退出码: {result.returncode}")
             # 失败通知由 auto-deploy.sh 的 trap 负责，避免重复
+
+        # 检查是否需要重启 webhook（webhook/ 代码变更时由 auto-deploy.sh 标记）
+        if os.path.exists("/tmp/mediapeople-webhook-needs-restart"):
+            try:
+                os.unlink("/tmp/mediapeople-webhook-needs-restart")
+            except Exception:
+                pass
+            logger.info("检测到 webhook 重启标记，15秒后延迟重启...")
+            # 用 systemd-run 创建独立 transient service 执行延迟重启
+            # 这样重启 webhook 时不会杀掉这个延迟重启进程
+            subprocess.Popen(
+                ["systemd-run", "--unit=mediapeople-webhook-restart",
+                 "bash", "-c", "sleep 15 && systemctl restart mediapeople-webhook"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
     except subprocess.TimeoutExpired:
         logger.error("部署超时 (300s)")
         bark_notify("mediapeople 部署超时", "部署脚本执行超过 300s 被强制终止")
@@ -162,6 +178,21 @@ class WebhookHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Deploying, skipped")
             return
+
+        # 额外检查跨进程锁，防止手动 SSH 触发的部署与 webhook 触发的并发
+        import fcntl
+        lock_fd = os.open("/var/run/mediapeople-deploy.lock", os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (IOError, OSError):
+            os.close(lock_fd)
+            deploying.release()
+            logger.info("跨进程锁被占用（手动部署进行中），跳过本次")
+            self.send_response(202)
+            self.end_headers()
+            self.wfile.write(b"Deploying, skipped")
+            return
+        os.close(lock_fd)  # auto-deploy.sh 内部会重新获取 flock
 
         logger.info(f"收到 push 事件 ({ref})，启动部署线程...")
         self.send_response(200)

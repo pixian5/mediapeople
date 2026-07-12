@@ -7,6 +7,7 @@ set -eo pipefail
 REPO_DIR="/opt/mediapeople"
 LOG_FILE="/var/log/mediapeople-deploy.log"
 BARK_KEY="RSyM7zPTvBfhNwf4RmMxic"
+LOCK_FILE="/var/run/mediapeople-deploy.lock"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -27,6 +28,7 @@ bark_notify() {
 # 部署结束通知（成功/失败均触发）
 DEPLOY_START_TIME=$(date +%s)
 bark_on_exit() {
+  set +e  # trap 内禁用 set -e，确保 bark_notify 一定能执行
   local exit_code=$?
   local elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
   local commit_hash commit_msg
@@ -47,6 +49,13 @@ bark_on_exit() {
 }
 trap bark_on_exit EXIT
 
+# 跨进程部署锁，防止 webhook 触发和手动 SSH 触发并发
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "另一个部署正在运行，退出"
+  exit 0
+fi
+
 log "===== 开始自动部署 ====="
 
 cd "$REPO_DIR"
@@ -55,7 +64,8 @@ PREVIOUS_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
 CURRENT_HEAD=""
 H5_BUILD_STAMP="$REPO_DIR/uniapp/dist/build/h5/.build-commit"
 
-# 拉取最新代码
+# 拉取最新代码（先恢复 npm install 可能改写的 lockfile，防止 pull 冲突）
+git -C "$REPO_DIR" checkout -- uniapp/package-lock.json 2>/dev/null || true
 log "正在 git pull --ff-only..."
 git pull --ff-only origin master 2>&1 | tee -a "$LOG_FILE"
 CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
@@ -74,7 +84,7 @@ if [ -z "$NODE_BIN" ]; then
   elif command -v nodejs >/dev/null 2>&1; then
     NODE_BIN="$(command -v nodejs)"
   else
-    NODE_BIN="$(find "$HOME/.nvm/versions/node" -maxdepth 3 -type f -name node 2>/dev/null | sort | tail -n 1)"
+    NODE_BIN="$(find "$HOME/.nvm/versions/node" -maxdepth 3 -type f -name node 2>/dev/null | sort -V | tail -n 1)"
   fi
 fi
 
@@ -142,10 +152,12 @@ else
 fi
 
 # webhook 服务自身变更时重启 systemd 服务，否则新代码不会生效
+# 用标记文件通知 webhook server 在部署完成后自行重启
 WEBHOOK_NEEDS_RESTART=false
 if echo "$CHANGED_FILES" | grep -q '^webhook/'; then
-  log "检测到 webhook/ 变更，将在部署完成后延迟重启 mediapeople-webhook 服务..."
+  log "检测到 webhook/ 变更，将在部署完成后触发重启..."
   WEBHOOK_NEEDS_RESTART=true
+  touch /tmp/mediapeople-webhook-needs-restart
 fi
 
 # 重建 SSL version API / Nginx 容器（若有必要）。compose 配置变更必须 recreate，restart 不会应用 extra_hosts/ports 等容器配置。
@@ -166,10 +178,3 @@ for container in web web-mini web-matchmaker web-admin web-ssl web-mini-ssl web-
 done
 
 log "===== 部署完成 ====="
-
-# webhook 重启放在最后，延迟执行，让 EXIT trap 先发完 Bark 通知
-if [ "$WEBHOOK_NEEDS_RESTART" = "true" ]; then
-  log "2秒后延迟重启 mediapeople-webhook 服务..."
-  nohup bash -c 'sleep 2 && systemctl restart mediapeople-webhook' &>/dev/null &
-  disown
-fi

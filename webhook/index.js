@@ -1,6 +1,6 @@
 import http from "http";
 import crypto from "crypto";
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import fs from "fs";
 
 const PORT = Number(process.env.WEBHOOK_PORT || 9000);
@@ -84,6 +84,16 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 额外检查跨进程锁，防止手动 SSH 触发的部署与 webhook 触发的并发
+    try {
+      execSync('flock -n /var/run/mediapeople-deploy.lock true', { stdio: 'ignore' });
+    } catch {
+      log("跨进程锁被占用（手动部署进行中），跳过本次");
+      res.writeHead(202);
+      res.end("Deploying, skipped");
+      return;
+    }
+
     log(`收到 push 事件 (${ref})，开始部署...`);
     res.writeHead(200);
     res.end("OK");
@@ -109,6 +119,13 @@ const server = http.createServer((req, res) => {
       }
       if (stdout) log(`stdout: ${stdout.trim()}`);
       if (stderr) log(`stderr: ${stderr.trim()}`);
+
+      // 检查是否需要重启 webhook（webhook/ 代码变更时由 auto-deploy.sh 标记）
+      if (fs.existsSync("/tmp/mediapeople-webhook-needs-restart")) {
+        try { fs.unlinkSync("/tmp/mediapeople-webhook-needs-restart"); } catch {}
+        log("检测到 webhook 重启标记，15秒后延迟重启...");
+        exec("systemd-run --unit=mediapeople-webhook-restart bash -c 'sleep 15 && systemctl restart mediapeople-webhook'", () => {});
+      }
     });
   });
 });
