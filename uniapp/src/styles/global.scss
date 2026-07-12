@@ -288,13 +288,14 @@ page {
 /* H5 桌面预览时，所有小程序页面保持手机竖屏宽度。 */
 @media screen and (min-width: 520px) {
   body {
-    background: linear-gradient(135deg, #dfe8eb 0%, #f6f8f9 100%);
+    background: #dfe8eb;
   }
 
   uni-app {
     display: block;
     width: 430px;
     max-width: 100vw;
+    height: auto !important;
     min-height: 100vh;
     margin: 0 auto;
     position: relative;
