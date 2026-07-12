@@ -136,6 +136,19 @@ else
   log "无 server/ 变更，前端文件通过 volume 挂载已更新"
 fi
 
+# webhook 服务自身变更时重启 systemd 服务，否则新代码不会生效
+if echo "$CHANGED_FILES" | grep -q '^webhook/'; then
+  log "检测到 webhook/ 变更，重启 mediapeople-webhook 服务..."
+  systemctl restart mediapeople-webhook 2>&1 | tee -a "$LOG_FILE"
+  sleep 1
+  if systemctl is-active --quiet mediapeople-webhook; then
+    log "mediapeople-webhook 已重启并运行"
+  else
+    log "ERROR: mediapeople-webhook 重启失败"
+    exit 1
+  fi
+fi
+
 # 重建 SSL version API / Nginx 容器（若有必要）。compose 配置变更必须 recreate，restart 不会应用 extra_hosts/ports 等容器配置。
 if docker ps --format '{{.Names}}' | grep -q 'mediapeople-web-ssl'; then
   if echo "$CHANGED_FILES" | grep -Eq '^(server/|compose\.ssl\.yml|deploy/nginx-ssl\.conf)'; then
