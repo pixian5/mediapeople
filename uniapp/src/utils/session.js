@@ -2,8 +2,11 @@ const LEGACY_SESSION_KEY = "matchmaker_session";
 
 const INITIAL_HASH_PATH = (() => {
   try {
+    const href = window.location.href || "";
+    const hrefHash = href.includes("#/pages/") ? href.slice(href.indexOf("#/pages/")) : "";
     const initialHash = window.__MATCHMAKER_INITIAL_HASH__ ||
       window.sessionStorage?.getItem("__MATCHMAKER_INITIAL_HASH__") ||
+      hrefHash ||
       window.location.hash;
     const hashPath = initialHash.slice(1).split("?")[0];
     return hashPath.startsWith("/pages/") ? hashPath : "";

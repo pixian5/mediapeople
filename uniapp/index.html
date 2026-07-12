@@ -8,10 +8,15 @@
         try {
           window.sessionStorage.removeItem('__MATCHMAKER_INITIAL_HASH__')
         } catch (error) {}
+        function readHash() {
+          var source = window.location.hash || window.location.href || ''
+          var marker = source.indexOf('#/pages/')
+          return marker >= 0 ? source.slice(marker) : ''
+        }
         function capture() {
           if (window.__MATCHMAKER_INITIAL_HASH__) return
-          var hash = window.location.hash
-          if (!hash.startsWith('#/pages/')) return
+          var hash = readHash()
+          if (!hash) return
           window.__MATCHMAKER_INITIAL_HASH__ = hash
           try {
             window.sessionStorage.setItem('__MATCHMAKER_INITIAL_HASH__', hash)
@@ -19,6 +24,10 @@
         }
         capture()
         window.addEventListener('hashchange', capture, true)
+        window.addEventListener('DOMContentLoaded', capture, true)
+        window.setTimeout(capture, 0)
+        window.setTimeout(capture, 50)
+        window.setTimeout(capture, 200)
       })()
       var coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)') ||
         CSS.supports('top: constant(a)'))
