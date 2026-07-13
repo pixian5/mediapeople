@@ -123,7 +123,7 @@
 | Docker Compose | 多容器编排（HTTP + SSL 两套 compose 文件） |
 | Nginx 1.27 | 静态文件服务 + API 反向代理 |
 | Let's Encrypt | 通配证书 `*.sbbz.tech`（acme.sh 管理） |
-| systemd / webhook | 自动部署触发 |
+| GitHub Actions | 自动部署触发（SSH 推送 + auto-deploy.sh） |
 
 ---
 
@@ -153,14 +153,10 @@ matchmaker/
 ├── deploy/                 部署配置
 │   ├── nginx.conf          HTTP Nginx 配置
 │   ├── nginx-ssl.conf      HTTPS Nginx 配置
-│   ├── auto-deploy.sh      服务器自动部署脚本
+│   ├── auto-deploy.sh      服务器自动部署脚本（由 GitHub Actions SSH 触发）
 │   └── ...
 ├── scripts/                构建脚本
 │   └── render-static.mjs   静态资源版本号渲染脚本
-├── webhook/                GitHub Webhook 服务
-│   ├── index.js            Webhook HTTP 服务
-│   ├── webhook_server.py   Python 版 Webhook 服务（备用）
-│   └── ...
 ├── 说明/                   项目详细说明文档（15 份）
 └── CODE_WIKI.md            本文档
 ```

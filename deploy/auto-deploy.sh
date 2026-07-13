@@ -1,5 +1,5 @@
 #!/bin/bash
-# auto-deploy.sh - 由 GitHub Webhook 或手动触发，自动拉取代码并重启服务
+# auto-deploy.sh - 由 GitHub Actions SSH 或手动触发，自动拉取代码并重启服务
 # 用法: bash /opt/matchmaker/deploy/auto-deploy.sh
 
 set -eo pipefail
@@ -53,7 +53,7 @@ bark_on_exit() {
 }
 trap bark_on_exit EXIT
 
-# 跨进程部署锁，防止 webhook 触发和手动 SSH 触发并发
+# 跨进程部署锁，防止 GitHub Actions 触发和手动 SSH 触发并发
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   log "另一个部署正在运行，退出"
@@ -190,15 +190,6 @@ if echo "$CHANGED_FILES" | grep -q '^server/'; then
   log "api 容器已重新构建并重启"
 else
   log "无 server/ 变更，前端文件通过 volume 挂载已更新"
-fi
-
-# webhook 服务自身变更时重启 systemd 服务，否则新代码不会生效
-# 用标记文件通知 webhook server 在部署完成后自行重启
-WEBHOOK_NEEDS_RESTART=false
-if echo "$CHANGED_FILES" | grep -q '^webhook/'; then
-  log "检测到 webhook/ 变更，将在部署完成后触发重启..."
-  WEBHOOK_NEEDS_RESTART=true
-  touch /tmp/matchmaker-webhook-needs-restart
 fi
 
 # 单端口网关配置变更需要 recreate；--remove-orphans 会清理旧的多端口前端容器。
