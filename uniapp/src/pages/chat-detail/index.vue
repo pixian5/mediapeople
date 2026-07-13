@@ -1,6 +1,6 @@
 <template>
   <view class="chat-detail-container">
-    <scroll-view class="message-list" scroll-y :scroll-into-view="scrollToId" :scroll-top="scrollTop" scroll-with-animation>
+    <scroll-view ref="messageListRef" class="message-list" scroll-y :scroll-into-view="scrollToId" :scroll-top="scrollTop" scroll-with-animation @scroll="handleScroll">
       <view v-if="!loading && messages.length === 0" class="chat-empty">
         <view class="empty-mark">缘</view>
         <text class="empty-title">还没有消息</text>
@@ -32,6 +32,9 @@
         @click="handleSend"
       >发送</button>
     </view>
+    <button v-if="newMessageCount > 0" class="new-message-button" @click="jumpToLatest">
+      {{ newMessageCount > 99 ? '99+' : newMessageCount }} 条新消息
+    </button>
   </view>
 </template>
 
@@ -50,6 +53,9 @@ const sending = ref(false);
 const loading = ref(true);
 const scrollToId = ref('');
 const scrollTop = ref(0);
+const messageListRef = ref(null);
+const isAtBottom = ref(true);
+const newMessageCount = ref(0);
 const inputFocused = ref(false);
 const messageInputRef = ref(null);
 const tempMessageIds = ref(new Set());
@@ -123,11 +129,13 @@ const syncLatestMessages = async (force = false) => {
   try {
     const res = await getChatMessagesApi(threadId.value);
     const newMessages = res.data?.list || [];
+    const existingIds = new Set(messages.value.map((message) => message.id));
     const prevCount = messages.value.filter((msg) => !tempMessageIds.value.has(msg.id)).length;
     mergeMessages(newMessages);
     const currentCount = messages.value.filter((msg) => !tempMessageIds.value.has(msg.id)).length;
     if (currentCount > prevCount) {
-      scrollToBottom();
+      const incomingCount = newMessages.filter((message) => !existingIds.has(message.id) && !isMine(message)).length;
+      if (incomingCount > 0) notifyIncomingMessage(incomingCount);
     }
   } catch (error) {
     //
@@ -215,10 +223,30 @@ const handleRealtimeMessage = (event) => {
   if (event.message?.threadId !== threadId.value) return;
   reconcileTempMessage(event.message);
   upsertMessage(event.message);
-  scrollToBottom();
+  if (!isMine(event.message)) notifyIncomingMessage();
+};
+
+const isMine = (msg) => msg.senderId === userStore.userId && msg.senderRole === 'client';
+
+const handleScroll = (event) => {
+  const detail = event?.detail || {};
+  const element = messageListRef.value?.$el || messageListRef.value;
+  const scrollTopValue = Number(detail.scrollTop ?? element?.scrollTop ?? 0);
+  const scrollHeight = Number(detail.scrollHeight ?? element?.scrollHeight ?? 0);
+  const clientHeight = Number(detail.clientHeight ?? element?.clientHeight ?? element?.offsetHeight ?? 0);
+  if (!scrollHeight || !clientHeight) return;
+  isAtBottom.value = scrollHeight - scrollTopValue - clientHeight <= 80;
+  if (isAtBottom.value) newMessageCount.value = 0;
+};
+
+const notifyIncomingMessage = (count = 1) => {
+  if (isAtBottom.value) scrollToBottom();
+  else newMessageCount.value += count;
 };
 
 const scrollToBottom = () => {
+  isAtBottom.value = true;
+  newMessageCount.value = 0;
   scrollToId.value = '';
   nextTick(() => {
     setTimeout(() => {
@@ -227,6 +255,8 @@ const scrollToBottom = () => {
     }, 30);
   });
 };
+
+const jumpToLatest = () => scrollToBottom();
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -472,6 +502,27 @@ const handleSend = async () => {
       opacity: 0.48;
       box-shadow: none;
     }
+  }
+}
+
+.new-message-button {
+  position: fixed;
+  right: 24rpx;
+  bottom: 132rpx;
+  z-index: 10;
+  min-width: 180rpx;
+  height: 64rpx;
+  padding: 0 24rpx;
+  border: 0;
+  border-radius: 32rpx;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 64rpx;
+  box-shadow: 0 8rpx 24rpx rgba(15, 118, 110, 0.28);
+
+  &::after {
+    border: none;
   }
 }
 </style>
