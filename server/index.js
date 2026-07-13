@@ -596,6 +596,21 @@ async function initDatabase() {
     on chat_messages (thread_id, (raw->>'clientMsgNo'))
     where thread_id is not null and nullif(raw->>'clientMsgNo', '') is not null
   `);
+  // 外键列与常查询字段索引，避免列表查询和去重检查全表扫描
+  await pool.query("create index if not exists match_requests_from_user_id_idx on match_requests (from_user_id)");
+  await pool.query("create index if not exists match_requests_to_user_id_idx on match_requests (to_user_id)");
+  await pool.query("create index if not exists match_requests_matchmaker_id_idx on match_requests (matchmaker_id)");
+  await pool.query("create index if not exists match_requests_status_idx on match_requests (status)");
+  await pool.query("create index if not exists chat_threads_request_id_idx on chat_threads (request_id)");
+  await pool.query("create index if not exists chat_threads_type_idx on chat_threads (type)");
+  await pool.query("create index if not exists chat_messages_thread_id_idx on chat_messages (thread_id)");
+  await pool.query("create index if not exists chat_messages_created_at_idx on chat_messages (created_at)");
+  await pool.query("create index if not exists matchmakers_agency_id_idx on matchmakers (agency_id)");
+  await pool.query("create index if not exists promo_codes_used_by_idx on promo_codes (used_by)");
+  await pool.query("create index if not exists blocks_blocker_id_idx on blocks (blocker_id)");
+  await pool.query("create index if not exists blocks_blocked_id_idx on blocks (blocked_id)");
+  await pool.query("create index if not exists reports_status_idx on reports (status)");
+  await pool.query("create index if not exists reports_created_at_idx on reports (created_at)");
   const userCountRes = await pool.query("select count(*) from users");
   const count = Number(userCountRes.rows[0].count);
   if (count === 0) {

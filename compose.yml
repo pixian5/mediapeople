@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "21314:443"
     volumes:
@@ -23,19 +23,31 @@ services:
     container_name: matchmaker-api
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-matchmaker}
       PGUSER: ${POSTGRES_USER:-matchmaker}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PORT: 3000
-      JWT_SECRET: ${JWT_SECRET:-matchmaker-dev-secret-change-me}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --tries=1 --timeout=3 http://127.0.0.1:3000/api/health | grep -q '\"ok\":true' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   postgres:
     image: postgres:16-alpine

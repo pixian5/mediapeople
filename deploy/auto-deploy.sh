@@ -6,7 +6,7 @@ set -eo pipefail
 
 REPO_DIR="/opt/matchmaker"
 LOG_FILE="/var/log/matchmaker-deploy.log"
-BARK_KEY="RSyM7zPTvBfhNwf4RmMxic"
+BARK_KEY="${BARK_KEY:-}"
 LOCK_FILE="/var/run/matchmaker-deploy.lock"
 
 log() {
@@ -16,6 +16,10 @@ log() {
 bark_notify() {
   local title="$1"
   local body="$2"
+  if [ -z "$BARK_KEY" ]; then
+    log "BARK_KEY 未配置，跳过推送：$title"
+    return 0
+  fi
   local esc_title esc_body
   esc_title=$(printf '%s' "$title" | sed 's/\\/\\\\/g; s/"/\\"/g')
   esc_body=$(printf '%s' "$body" | sed 's/\\/\\\\/g; s/"/\\"/g')
