@@ -9,15 +9,15 @@
  *   node scripts/full-business-audit.mjs
  *
  * Optional env:
- *   CLIENT_API=https://uk.sbbz.tech:9446/api
- *   MATCHMAKER_API=https://uk.sbbz.tech:9447/api
- *   ADMIN_API=https://uk.sbbz.tech:9448/api
+ *   CLIENT_API=https://uk.sbbz.tech:21314/api
+ *   MATCHMAKER_API=https://uk.sbbz.tech:21314/api
+ *   ADMIN_API=https://uk.sbbz.tech:21314/api
  *   ADMIN_PASSWORD=admin
  */
 
-const BASE_CLIENT = process.env.CLIENT_API || "https://uk.sbbz.tech:9446/api";
-const BASE_MM = process.env.MATCHMAKER_API || "https://uk.sbbz.tech:9447/api";
-const BASE_ADMIN = process.env.ADMIN_API || "https://uk.sbbz.tech:9448/api";
+const BASE_CLIENT = process.env.CLIENT_API || "https://uk.sbbz.tech:21314/api";
+const BASE_MM = process.env.MATCHMAKER_API || "https://uk.sbbz.tech:21314/api";
+const BASE_ADMIN = process.env.ADMIN_API || "https://uk.sbbz.tech:21314/api";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
 const ts = Date.now();
 const results = [];
@@ -141,7 +141,7 @@ await step("client registration/profile/review", async () => {
   });
   maleToken = male.data.token;
   ids.maleId = male.data.user.id;
-  assert(male.data.user.delegatedMatchmakerIds?.length > 0, "default matchmakers missing");
+  assert(male.data.user.matchmakerIds?.length > 0, "default matchmakers missing");
 
   const profile = await req(BASE_CLIENT, "/client/profile", {
     method: "PATCH",
@@ -149,7 +149,7 @@ await step("client registration/profile/review", async () => {
     body: {
       name: `审计男更新${ts}`,
       avatar: "https://example.com/audit.png",
-      delegatedMatchmakerIds: ["m1"],
+      matchmakerIds: ["m1"],
     },
   });
   assert(profile.data.user.photo === "https://example.com/audit.png", "avatar not saved");
@@ -180,7 +180,7 @@ await step("vip scoped visibility and match request", async () => {
       city: "上海",
       job: "审计产品",
       wechat: `audit_f_${ts}`,
-      delegatedMatchmakerIds: ["m1"],
+      matchmakerIds: ["m1"],
     },
   });
   ids.femaleId = female.data.user.id;
@@ -198,7 +198,7 @@ await step("vip scoped visibility and match request", async () => {
     token: maleToken,
     body: { referralCode: "HM-LILI" },
   });
-  assert(vip.data.user.vipMatchmakerIds?.includes("m1"), "m1 vip missing");
+  assert(vip.data.user.servicePlans?.some((plan) => plan.status === "active" && plan.matchmakerId === "m1"), "m1 vip missing");
 
   const m1Target = await req(BASE_CLIENT, `/client/profiles/${ids.femaleId}`, { token: maleToken });
   assert(m1Target.data.data.user.wechat === `audit_f_${ts}`, "m1 target wechat hidden");

@@ -123,7 +123,7 @@ POST /api/auth/client/register
 | bio | string | 否 | 自我介绍 |
 | requirements | string | 否 | 择偶要求 |
 | photo | string | 否 | 头像 URL |
-| delegatedMatchmakerIds | string[] | 否 | 委托红娘列表 |
+| matchmakerIds | string[] | 否 | 委托红娘列表 |
 
 **响应**：
 
@@ -160,7 +160,7 @@ POST /api/auth/client/register
 
 **复杂场景**：
 
-- 注册时选择的 `delegatedMatchmakerIds` 决定了哪些红娘可以看到该客户
+- 注册时选择的 `matchmakerIds` 决定了哪些红娘可以看到该客户
 - 如果未选择，默认委托给所有红娘
 - 注册后自动登录（返回 token）
 
@@ -327,7 +327,7 @@ PATCH /api/client/profile
 | wechat | string | 微信号 |
 | bio | string | 自我介绍 |
 | requirements | string | 择偶要求 |
-| delegatedMatchmakerIds | string[] | 委托红娘列表 |
+| matchmakerIds | string[] | 委托红娘列表 |
 | syncAllMatchmakers | boolean | 是否同步所有 VIP 红娘 |
 
 **响应**：`{ user, state }`
@@ -579,12 +579,12 @@ POST /api/client/match-requests
 4. 检查是否已有未完成请求（同一发起方、目标方、红娘）→有则提示"这条牵线请求已经在处理中"
 5. 确定红娘：
    - 优先使用指定的 matchmakerId
-   - 否则从目标方的 delegatedMatchmakerIds 中取第一个
-   - 否则从发起方的 referralMatchmakerId 取
+   - 否则从目标方的 matchmakerIds 中取第一个
+   - 否则从发起方的 matchmakerIds 列表取第一个
 6. 校验：
    - 发起方必须是 VIP
-   - 红娘必须在发起方的 vipMatchmakerIds 中
-   - 目标方必须在红娘的 delegatedMatchmakerIds 中
+   - 发起方必须存在该红娘的有效 servicePlans[].matchmakerId
+   - 目标方必须在红娘的 matchmakerIds 中
 7. 创建牵线请求（状态：待红娘联系）
 8. 自动创建两条聊天线程：
    - 红娘-男方聊天线程
@@ -1290,9 +1290,8 @@ graph TD
       "vipExpiresAt": "2027-06-25T00:00:00.000Z",
       "accountStatus": "active",
       "realNameVerified": true,
-      "delegatedMatchmakerIds": ["m1", "m2"],
-      "referralMatchmakerId": "m1",
-      "vipMatchmakerIds": ["m1"],
+      "matchmakerIds": ["m1", "m2"],
+      "servicePlans": [{ "matchmakerId": "m1", "status": "active", "expiresAt": "2027-06-25T00:00:00.000Z" }],
       "profileByMatchmaker": {
         "m1": { "status": "published", "data": { "name": "林安", "age": 28 } }
       },
@@ -1420,9 +1419,8 @@ graph TD
     "vipExpiresAt": null,
     "accountStatus": "active",
     "realNameVerified": false,
-    "delegatedMatchmakerIds": ["m1", "m2"],
-    "referralMatchmakerId": null,
-    "vipMatchmakerIds": [],
+    "matchmakerIds": ["m1", "m2"],
+    "servicePlans": [],
     "profileByMatchmaker": {},
     "createdAt": "2026-06-25T12:00:00.000Z",
     "updatedAt": "2026-06-25T12:00:00.000Z"
@@ -1446,9 +1444,8 @@ graph TD
         "vipExpiresAt": null,
         "accountStatus": "active",
         "realNameVerified": false,
-        "delegatedMatchmakerIds": ["m1", "m2"],
-        "referralMatchmakerId": null,
-        "vipMatchmakerIds": [],
+        "matchmakerIds": ["m1", "m2"],
+        "servicePlans": [],
         "profileByMatchmaker": {},
         "createdAt": "2026-06-25T12:00:00.000Z",
         "updatedAt": "2026-06-25T12:00:00.000Z"
@@ -1493,7 +1490,7 @@ graph TD
         "id": "u123",
         "name": "张三",
         "vip": true,
-        "vipMatchmakerIds": ["m1"]
+        "servicePlans": [{ "matchmakerId": "m1", "status": "active", "expiresAt": "2027-06-25T00:00:00.000Z" }]
       }
     ],
     "matchmakers": [

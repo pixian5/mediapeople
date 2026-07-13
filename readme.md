@@ -197,7 +197,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ### 红娘端
 
-1. 打开 `https://uk.sbbz.tech:21314/pages/matchmaker/login/index`。
+1. 打开 `https://uk.sbbz.tech:21314/#/pages/matchmaker/login/index`。
 2. 登录李莉。
 3. 找到林安申请认识孟晚棠的请求。
 4. 点击“联系男方”。
@@ -216,7 +216,7 @@ ssh -o StrictHostKeyChecking=no root@uk.sbbz.tech \
 
 ### 后台端
 
-1. 打开 `https://uk.sbbz.tech:21314/pages/admin/login/index`。
+1. 打开 `https://uk.sbbz.tech:21314/#/pages/admin/login/index`。
 2. 输入 `admin` 登录。
 3. 检查概览、分成比例、机构管理、红娘管理、客户信息、兑换码。
 

@@ -5,7 +5,7 @@
 import http from "node:http";
 import https from "node:https";
 
-const API_BASE = process.argv[2] || "https://uk.sbbz.tech:9445";
+const API_BASE = process.argv[2] || "https://uk.sbbz.tech:21314";
 const THREAD_ID = process.argv[3] || null;
 
 function request(method, path, body, token) {

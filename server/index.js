@@ -115,6 +115,16 @@ function getActiveServicePlan(user, matchmakerId = null) {
   ) || null;
 }
 
+function getServiceMatchmakerIds(user) {
+  ensureServiceSubscriptions(user);
+  const activePlans = user.servicePlans.filter((plan) =>
+    plan.status === "active" && new Date(plan.expiresAt) > new Date()
+  );
+  const ids = activePlans.filter((plan) => plan.matchmakerId).map((plan) => plan.matchmakerId);
+  if (activePlans.some((plan) => !plan.matchmakerId)) ids.push(...user.matchmakerIds);
+  return [...new Set(ids.filter(Boolean))];
+}
+
 // 敏感词列表（反欺诈：杀猪盘、引流、博彩、违规交易等）
 const SENSITIVE_WORDS = [
   "转账", "支付宝", "银行卡", "汇款", "网银", "充值",
@@ -178,7 +188,7 @@ const seedState = {
       job: "软件工程师",
       wechat: "linan_dev",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "喜欢城市漫步和认真做饭，工作稳定，想找一个能一起成长的人。",
       requirements: "希望对方真诚、有稳定生活节奏，愿意沟通，也喜欢旅行或阅读。",
       photo:
@@ -193,7 +203,7 @@ const seedState = {
       job: "市场营销经理",
       wechat: "qing_brand",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "性格温和但有主见，喜欢展览、咖啡和羽毛球，期待长期关系。",
       requirements: "希望男生有责任心，情绪稳定，工作积极，年龄 28-35 岁。",
       photo:
@@ -208,7 +218,7 @@ const seedState = {
       job: "项目管理",
       wechat: "xuzhixia_pm",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "常年做项目管理，喜欢高效也珍惜松弛，周末会去爬山。",
       requirements: "希望对方成熟坦诚，尊重彼此事业，有结婚计划。",
       photo:
@@ -223,7 +233,7 @@ const seedState = {
       job: "建筑师",
       wechat: "yizhou_arch",
       vip: true,
-      referralMatchmakerId: "m2",
+      matchmakerIds: ["m2"],
       bio: "工作在建筑设计行业，生活里比较安静，喜欢骑行、做咖啡和看老电影。",
       requirements: "希望女生独立、善良，能接受偶尔出差，愿意认真经营关系。",
       photo:
@@ -238,7 +248,7 @@ const seedState = {
       job: "公务员",
       wechat: "yubai_story",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "工作稳定有规律，平时喜欢打网球、听播客，也会认真记录生活里的小事。",
       requirements: "希望对方乐观坦率，愿意一起尝试新鲜事物，工作和生活都有边界感。",
       photo:
@@ -253,7 +263,7 @@ const seedState = {
       job: "UI设计师",
       wechat: "jiayi_design",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "喜欢美术馆、手作和城市短途旅行，性格慢热但很重视承诺。",
       requirements: "希望男生真诚稳定，尊重审美和个人空间，年龄 27-34 岁。",
       photo:
@@ -268,7 +278,7 @@ const seedState = {
       job: "金融分析师",
       wechat: "nanxing_fin",
       vip: true,
-      referralMatchmakerId: "m2",
+      matchmakerIds: ["m2"],
       bio: "项目型工作者，节奏有时很紧，但会给重要关系留出确定时间。",
       requirements: "希望对方成熟独立，能坦诚沟通，对家庭和事业都有清晰规划。",
       photo:
@@ -283,7 +293,7 @@ const seedState = {
       job: "心理咨询师",
       wechat: "yinuo_mind",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "常在外地参加培训，喜欢真实的人和有温度的关系，休息时会做瑜伽。",
       requirements: "希望对方心态开放，能理解彼此的工作节奏，愿意长期认真相处。",
       photo:
@@ -298,7 +308,7 @@ const seedState = {
       job: "产品经理",
       wechat: "jingran_pm",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "互联网产品经理，喜欢潜水、桌游和做计划，正在学习更松弛地生活。",
       requirements: "希望女生有稳定价值观，愿意沟通，彼此支持而不是消耗。",
       photo:
@@ -313,7 +323,7 @@ const seedState = {
       job: "公关顾问",
       wechat: "wantang_pr",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "沟通型人格，喜欢剧场、粤菜和海边散步，期待轻松但认真地相处。",
       requirements: "希望对方情绪稳定，有幽默感，能一起面对现实问题。",
       photo:
@@ -333,12 +343,6 @@ const seedState = {
 };
 
 seedState.users.forEach((u) => {
-  if (!u.vipMatchmakerIds) {
-    u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
-  }
-  if (!u.delegatedMatchmakerIds) {
-    u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
-  }
   // 为种子用户设置默认密码 "123456"，防止无密码即可登录
   if (!u.passwordHash) {
     u.passwordHash = hashPassword("123456");
@@ -422,7 +426,6 @@ async function initDatabase() {
       phone text,
       email text,
       vip boolean not null default false,
-      referral_matchmaker_id text references matchmakers(id) on delete set null,
       password_hash text,
       account_status text,
       registered_at timestamptz,
@@ -431,6 +434,7 @@ async function initDatabase() {
       updated_at timestamptz not null default now()
     )
   `);
+  await pool.query("alter table users drop column if exists referral_matchmaker_id");
   await pool.query(`
     create table if not exists match_requests (
       id text primary key,
@@ -629,29 +633,13 @@ function ensureRequestDefaults(request) {
 }
 
 function ensureUserDefaults(user) {
-  if (!Array.isArray(user.vipMatchmakerIds)) {
-    user.vipMatchmakerIds = user.vip && user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
-  }
-  if (!Array.isArray(user.delegatedMatchmakerIds)) {
-    user.delegatedMatchmakerIds = user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
-  }
-  // 兼容早期数据：绑定关系可能只保存在 referralMatchmakerId，不能因数组为空误判未绑定。
-  if (user.referralMatchmakerId && !user.delegatedMatchmakerIds.includes(user.referralMatchmakerId)) {
-    user.delegatedMatchmakerIds.unshift(user.referralMatchmakerId);
-  }
-  if (user.vip && user.referralMatchmakerId && !user.vipMatchmakerIds.includes(user.referralMatchmakerId)) {
-    user.vipMatchmakerIds.push(user.referralMatchmakerId);
-  }
+  user.matchmakerIds = Array.isArray(user.matchmakerIds) ? user.matchmakerIds.filter(Boolean) : [];
   if (!user.profileByMatchmaker || typeof user.profileByMatchmaker !== "object") {
     user.profileByMatchmaker = {};
   }
-  user.vip = user.vip || user.vipMatchmakerIds.length > 0;
-  if (user.vip && user.referralMatchmakerId && !user.vipMatchmakerIds.includes(user.referralMatchmakerId)) {
-    user.vipMatchmakerIds.push(user.referralMatchmakerId);
-  }
   if (!user.servicePlan && user.vip) {
     const expiresAt = user.vipExpiresAt ? new Date(user.vipExpiresAt) : new Date(Date.now() + LEGACY_SERVICE_PLAN.durationDays * 24 * 60 * 60 * 1000);
-    user.servicePlan = createServicePlan(new Date(expiresAt.getTime() - LEGACY_SERVICE_PLAN.durationDays * 24 * 60 * 60 * 1000), "monthly", user.referralMatchmakerId || null);
+    user.servicePlan = createServicePlan(new Date(expiresAt.getTime() - LEGACY_SERVICE_PLAN.durationDays * 24 * 60 * 60 * 1000), "monthly", user.matchmakerIds[0] || null);
     user.servicePlan.expiresAt = expiresAt.toISOString();
   }
   if (user.servicePlan) {
@@ -687,7 +675,7 @@ function buildMatchmakerProfilePayload(user) {
 }
 
 function applyPublishedProfile(user) {
-  const matchmakerId = user.delegatedMatchmakerIds?.[0] || user.referralMatchmakerId || null;
+  const matchmakerId = user.matchmakerIds?.[0] || null;
   const published = matchmakerId ? user.profileByMatchmaker?.[matchmakerId]?.published : null;
   return published ? { ...user, ...published } : { ...user };
 }
@@ -695,21 +683,15 @@ function applyPublishedProfile(user) {
 function upsertUserVipMatchmaker(user, matchmakerId) {
   ensureUserDefaults(user);
   if (!matchmakerId) return user;
-  if (!user.vipMatchmakerIds.includes(matchmakerId)) user.vipMatchmakerIds.push(matchmakerId);
-  if (!user.delegatedMatchmakerIds.includes(matchmakerId)) user.delegatedMatchmakerIds.push(matchmakerId);
-  if (!user.referralMatchmakerId) user.referralMatchmakerId = matchmakerId;
+  if (!user.matchmakerIds.includes(matchmakerId)) user.matchmakerIds.push(matchmakerId);
   user.vip = true;
   return user;
 }
 
 function canViewTargetContact(viewer, target) {
-  const viewerVipIds = Array.isArray(viewer?.vipMatchmakerIds) ? viewer.vipMatchmakerIds : [];
-  const targetMatchmakerIds = Array.isArray(target?.delegatedMatchmakerIds) && target.delegatedMatchmakerIds.length
-    ? target.delegatedMatchmakerIds
-    : target?.referralMatchmakerId
-      ? [target.referralMatchmakerId]
-      : [];
-  return targetMatchmakerIds.some((id) => viewerVipIds.includes(id));
+  const viewerIds = getServiceMatchmakerIds(viewer);
+  const targetIds = Array.isArray(target?.matchmakerIds) ? target.matchmakerIds : [];
+  return targetIds.some((id) => viewerIds.includes(id));
 }
 
 function getRequestContactStatus(request) {
@@ -1124,10 +1106,9 @@ async function syncNormalizedState(data, existingClient = null) {
         `
           insert into users (
             id, name, gender, age, city, job, wechat, phone, email, vip,
-            referral_matchmaker_id, password_hash, account_status, registered_at,
-            real_name_verified, raw
+            password_hash, account_status, registered_at, real_name_verified, raw
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
           on conflict (id) do update set
             name = excluded.name,
             gender = excluded.gender,
@@ -1138,7 +1119,6 @@ async function syncNormalizedState(data, existingClient = null) {
             phone = excluded.phone,
             email = excluded.email,
             vip = excluded.vip,
-            referral_matchmaker_id = excluded.referral_matchmaker_id,
             password_hash = excluded.password_hash,
             account_status = excluded.account_status,
             registered_at = excluded.registered_at,
@@ -1157,7 +1137,6 @@ async function syncNormalizedState(data, existingClient = null) {
           user.phone || null,
           user.email || null,
           Boolean(user.vip),
-          user.referralMatchmakerId || null,
           user.passwordHash || null,
           user.accountStatus || null,
           asDate(user.registeredAt),
@@ -1452,10 +1431,9 @@ app.post("/api/auth/client/register", async (request, response) => {
   }
 
   const allMatchmakerIds = (state.matchmakers || []).map((matchmaker) => matchmaker.id).filter(Boolean);
-  const delegatedMatchmakerIds = Array.isArray(input.delegatedMatchmakerIds) && input.delegatedMatchmakerIds.length
-    ? input.delegatedMatchmakerIds
+  const matchmakerIds = Array.isArray(input.matchmakerIds) && input.matchmakerIds.length
+    ? input.matchmakerIds
     : allMatchmakerIds;
-  const referralMatchmakerId = delegatedMatchmakerIds[0] || null;
 
   const user = {
     id: `u${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
@@ -1474,9 +1452,7 @@ app.post("/api/auth/client/register", async (request, response) => {
     realName: null,
     idCard: null,
     vip: false,
-    vipMatchmakerIds: [],
-    referralMatchmakerId,
-    delegatedMatchmakerIds,
+    matchmakerIds,
     profileByMatchmaker: {},
     bio: String(input.bio || "").trim(),
     requirements: String(input.requirements || "").trim(),
@@ -1560,7 +1536,7 @@ app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
 // 1. 客户：修改个人资料
 app.patch("/api/client/profile", requireAuth(["client"]), async (request, response) => {
   const userId = request.user.sub;
-  const { name, gender, age, city, job, wechat, bio, requirements, photo, avatar, delegatedMatchmakerIds, syncAllMatchmakers } = request.body || {};
+  const { name, gender, age, city, job, wechat, bio, requirements, photo, avatar, matchmakerIds, syncAllMatchmakers } = request.body || {};
   
   const userRes = await pool.query("select raw from users where id = $1", [userId]);
   if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
@@ -1578,13 +1554,12 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   user.photo = photo !== undefined ? String(photo).trim() : avatar !== undefined ? String(avatar).trim() : user.photo;
   
   const selectedMatchmakerIds = syncAllMatchmakers
-    ? user.vipMatchmakerIds
-    : (Array.isArray(delegatedMatchmakerIds) ? delegatedMatchmakerIds : user.delegatedMatchmakerIds);
-  user.delegatedMatchmakerIds = selectedMatchmakerIds.filter(Boolean);
-  user.referralMatchmakerId = user.delegatedMatchmakerIds[0] || user.referralMatchmakerId || null;
+    ? user.matchmakerIds
+    : (Array.isArray(matchmakerIds) ? matchmakerIds : user.matchmakerIds);
+  user.matchmakerIds = selectedMatchmakerIds.filter(Boolean);
 
   const profilePayload = buildMatchmakerProfilePayload(user);
-  for (const matchmakerId of user.delegatedMatchmakerIds) {
+  for (const matchmakerId of user.matchmakerIds) {
     const currentProfile = user.profileByMatchmaker[matchmakerId] || {};
     user.profileByMatchmaker[matchmakerId] = {
       ...currentProfile,
@@ -1596,8 +1571,8 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   }
   
   await pool.query(
-    `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, referral_matchmaker_id = $7, raw = $8, updated_at = now() where id = $9`,
-    [user.name, user.gender, user.age, user.city, user.job, user.wechat, user.referralMatchmakerId || null, JSON.stringify(user), userId]
+    `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, raw = $7, updated_at = now() where id = $8`,
+    [user.name, user.gender, user.age, user.city, user.job, user.wechat, JSON.stringify(user), userId]
   );
   response.json({ user, state: publicState(await readState()) });
 });
@@ -1855,8 +1830,8 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
     user.vipExpiresAt = user.servicePlan.expiresAt.slice(0, 10);
     if (matchmakerId) upsertUserVipMatchmaker(user, matchmakerId);
     await client.query(
-      "update users set vip = true, referral_matchmaker_id = $1, raw = $2, updated_at = now() where id = $3",
-      [user.referralMatchmakerId, JSON.stringify(user), userId]
+      "update users set vip = true, raw = $1, updated_at = now() where id = $2",
+      [JSON.stringify(user), userId]
     );
 
     // 写入流水
@@ -1900,20 +1875,13 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
 
   const reqId = `r${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
   if (!matchmakerId) {
-    matchmakerId = toUser.delegatedMatchmakerIds?.[0] || toUser.referralMatchmakerId || fromUser.referralMatchmakerId || null;
+    matchmakerId = toUser.matchmakerIds?.[0] || fromUser.matchmakerIds?.[0] || null;
   }
   if (!matchmakerId) return response.status(400).json({ error: "matchmaker_required" });
-  const activeBoundMatchmakerIds = new Set([
-    ...fromUser.vipMatchmakerIds,
-    ...fromUser.servicePlans
-      .filter((plan) => plan.status === "active" && new Date(plan.expiresAt) > new Date() && plan.matchmakerId)
-      .map((plan) => plan.matchmakerId),
-    fromUser.referralMatchmakerId,
-  ].filter(Boolean));
+  const activeBoundMatchmakerIds = new Set(getServiceMatchmakerIds(fromUser));
   if (!activeBoundMatchmakerIds.has(matchmakerId)) return response.status(403).json({ error: "matchmaker_vip_required" });
   const targetBoundMatchmakerIds = new Set([
-    ...toUser.delegatedMatchmakerIds,
-    toUser.referralMatchmakerId,
+    ...toUser.matchmakerIds,
   ].filter(Boolean));
   if (!targetBoundMatchmakerIds.has(matchmakerId)) return response.status(400).json({ error: "target_not_bound_to_matchmaker" });
 
@@ -2638,7 +2606,7 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
         score += 7;
       }
       // VIP 特权曝光（+15）
-      if (target.vipMatchmakerIds && target.vipMatchmakerIds.length > 0) {
+      if (target.matchmakerIds && target.matchmakerIds.length > 0) {
         score += 15;
       }
       // 择偶要求匹配（+5，如果viewer.age在target.requirements提到的年龄范围内）
@@ -2663,7 +2631,7 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
       if (!canViewTargetContact(me, target)) {
         delete userInfo.wechat;
       }
-      userInfo.delegatedMatchmakers = (userInfo.delegatedMatchmakerIds || [])
+      userInfo.boundMatchmakers = (userInfo.matchmakerIds || [])
         .map((id) => matchmakerMap.get(id))
         .filter(Boolean)
         .map(({ passwordHash: _passwordHash, ...matchmaker }) => matchmaker);
@@ -2721,7 +2689,7 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
     }
     const matchmakersRes = await pool.query("select raw from matchmakers");
     const matchmakerMap = new Map(matchmakersRes.rows.map((row) => [row.raw.id, row.raw]));
-    userInfo.delegatedMatchmakers = (userInfo.delegatedMatchmakerIds || [])
+    userInfo.boundMatchmakers = (userInfo.matchmakerIds || [])
       .map((id) => matchmakerMap.get(id))
       .filter(Boolean)
       .map(({ passwordHash: _passwordHash, ...matchmaker }) => matchmaker);

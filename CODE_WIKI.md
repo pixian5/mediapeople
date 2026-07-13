@@ -45,10 +45,10 @@
 
 | 角色 | 入口文件 | HTTP 端口 | HTTPS 端口 | 核心功能 |
 |------|----------|-----------|------------|----------|
-| **客户（真实 H5）** | `uniapp/src/` | 8096 | 9446 | 注册登录、资料维护、服务订阅、申请牵线、实时聊天 |
-| **红娘（工作台）** | [matchmaker.html](file:///Users/x/code/matchmaker/matchmaker.html) | 8097 | 9447 | 注册登录、查看牵线通知、联系双方、查看微信、一对一聊天 |
-| **管理员（后台）** | [admin.html](file:///Users/x/code/matchmaker/admin.html) | 8098 | 9448 | 客户/红娘/机构管理、分成设置、兑换码管理、数据图表 |
-| **综合预览端** | [index.html](file:///Users/x/code/matchmaker/index.html) | 8095 | 9445 | 红娘和管理后台预览；客户业务跳转真实 H5 |
+| **客户（真实 H5）** | `uniapp/src/` | 8096 | 21314 | 注册登录、资料维护、服务订阅、申请牵线、实时聊天 |
+| **红娘（工作台）** | [matchmaker.html](file:///Users/x/code/matchmaker/matchmaker.html) | 8097 | 21314 | 注册登录、查看牵线通知、联系双方、查看微信、一对一聊天 |
+| **管理员（后台）** | [admin.html](file:///Users/x/code/matchmaker/admin.html) | 8098 | 21314 | 客户/红娘/机构管理、分成设置、兑换码管理、数据图表 |
+| **综合预览端** | [index.html](file:///Users/x/code/matchmaker/index.html) | 8095 | 21314 | 红娘和管理后台预览；客户业务跳转真实 H5 |
 
 ### 1.4 仓库信息
 
@@ -69,7 +69,7 @@
 │                      浏览器 / 客户端                          │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
 │  │ 综合预览  │  │ 客户小程序│  │ 红娘工作台│  │ 管理后台  │   │
-│  │ 8095/9445│  │ 8096/9446│  │ 8097/9447│  │8098/9448 │   │
+│  │ 8095/21314│  │ 8096/21314│  │ 8097/21314│  │8098/21314 │   │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
 │       └──────────────┴────────────┴──────────────┘          │
 │                      ▼ HTTP /api/*                           │
@@ -133,10 +133,10 @@
 
 ```
 matchmaker/
-├── index.html              综合预览端（8095/9445）
-├── uniapp/src/             真实客户 H5/微信小程序（8096/9446）
-├── matchmaker.html         红娘工作台端（8097/9447）
-├── admin.html              管理后台端（8098/9448）
+├── index.html              综合预览端（8095/21314）
+├── uniapp/src/             真实客户 H5/微信小程序（8096/21314）
+├── matchmaker.html         红娘工作台端（8097/21314）
+├── admin.html              管理后台端（8098/21314）
 ├── app.js                  前端业务逻辑（约 3900 行）
 ├── styles.css              全局样式表（约 1680 行）
 ├── package.json            根项目配置
@@ -540,7 +540,6 @@ CREATE TABLE users (
     phone                   TEXT,
     email                   TEXT,
     vip                     BOOLEAN NOT NULL DEFAULT FALSE,
-    referral_matchmaker_id  TEXT REFERENCES matchmakers(id) ON DELETE SET NULL,
     password_hash           TEXT,
     account_status          TEXT,
     registered_at           TIMESTAMPTZ,
@@ -551,8 +550,8 @@ CREATE TABLE users (
 ```
 
 `raw` JSONB 额外字段：
-- `vipMatchmakerIds`：VIP 红娘列表
-- `delegatedMatchmakerIds`：委托红娘列表
+- `servicePlans`：服务包列表，每个服务包通过 `matchmakerId` 绑定红娘
+- `matchmakerIds`：会员绑定的红娘列表
 - `profileByMatchmaker`：按红娘分的资料审核状态
 - `vipExpiresAt`：VIP 到期日期
 - `realName` / `idCard`：实名认证信息（不返回前端）
@@ -658,7 +657,6 @@ CREATE TABLE app_settings (
 
 ```
 agencies ←── matchmakers.agency_id
-matchmakers ←── users.referral_matchmaker_id
 users ──→ match_requests.from_user_id / to_user_id
 matchmakers ←── match_requests.matchmaker_id
 match_requests ←── chat_threads.request_id
@@ -674,7 +672,6 @@ users ←── promo_codes.used_by
 - 删除牵线请求 → 关联聊天线程级联删除 → 关联消息级联删除
 - 删除聊天线程 → 关联消息级联删除
 - 删除机构 → 关联红娘的 `agency_id` 置为 NULL
-- 删除红娘 → 关联客户的 `referral_matchmaker_id` 置为 NULL
 
 ---
 
@@ -726,7 +723,7 @@ POST /api/auth/client/register
 | name | string | 是 | 姓名 |
 | phone/email | string | 条件 | 至少填一个 |
 | password | string | 是 | 密码 |
-| delegatedMatchmakerIds | string[] | 否 | 委托红娘列表 |
+| matchmakerIds | string[] | 否 | 委托红娘列表 |
 
 响应：`{ token, user, state }`
 
@@ -939,10 +936,10 @@ docker compose -f compose.yml -f compose.ssl.yml up -d --build
 
 | 角色 | HTTP 地址 | HTTPS 地址 |
 |------|-----------|------------|
-| 综合预览端 | http://localhost:8095 | https://localhost:9445 |
-| 客户小程序端 | http://localhost:8096 | https://localhost:9446 |
-| 红娘工作台 | http://localhost:8097 | https://localhost:9447 |
-| 管理后台 | http://localhost:8098 | https://localhost:9448 |
+| 综合预览端 | http://localhost:8095 | https://localhost:21314 |
+| 客户小程序端 | http://localhost:8096 | https://localhost:21314 |
+| 红娘工作台 | http://localhost:8097 | https://localhost:21314 |
+| 管理后台 | http://localhost:8098 | https://localhost:21314 |
 
 ### 10.4 语法检查
 
@@ -1084,7 +1081,7 @@ for port in 8095 8096 8097 8098; do
 done
 
 # HTTPS 健康检查
-for port in 9445 9446 9447 9448; do
+for port in 21314; do
   printf "HTTPS=%s " "$port"
   curl -fsS --max-time 12 https://uk.sbbz.tech:$port/api/health
   printf "\n"

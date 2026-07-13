@@ -128,7 +128,7 @@
           <text class="customer-vip" :class="{ vip: user.vip }">{{ user.vip ? 'VIP' : '普通' }}</text>
         </view>
         <text class="customer-line">城市：{{ user.city || '-' }}</text>
-        <text class="customer-line">红娘：{{ getMatchmakerName(user.referralMatchmakerId) || '-' }}</text>
+        <text class="customer-line">红娘：{{ getMatchmakerName(user.matchmakerIds?.[0]) || '-' }}</text>
         <text class="customer-line">微信：{{ user.wechat || '-' }}</text>
         <text class="customer-line">联系方式：{{ user.phone || '-' }} / {{ user.email || '-' }}</text>
         <text class="customer-line">实名：{{ user.realNameVerified ? `已实名 (${user.realName})` : '未实名' }}</text>

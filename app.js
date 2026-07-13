@@ -41,7 +41,7 @@ const seedState = {
       job: "软件工程师",
       wechat: "linan_dev",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "喜欢城市漫步和认真做饭，工作稳定，想找一个能一起成长的人。",
       requirements: "希望对方真诚、有稳定生活节奏，愿意沟通，也喜欢旅行或阅读。",
       photo:
@@ -56,7 +56,7 @@ const seedState = {
       job: "市场营销经理",
       wechat: "qing_brand",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "性格温和但有主见，喜欢展览、咖啡和羽毛球，期待长期关系。",
       requirements: "希望男生有责任心，情绪稳定，工作积极，年龄 28-35 岁。",
       photo:
@@ -71,7 +71,7 @@ const seedState = {
       job: "项目管理",
       wechat: "xuzhixia_pm",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "常年做项目管理，喜欢高效也珍惜松弛，周末会去爬山。",
       requirements: "希望对方成熟坦诚，尊重彼此事业，有结婚计划。",
       photo:
@@ -86,7 +86,7 @@ const seedState = {
       job: "建筑师",
       wechat: "yizhou_arch",
       vip: true,
-      referralMatchmakerId: "m2",
+      matchmakerIds: ["m2"],
       bio: "工作在建筑设计行业，生活里比较安静，喜欢骑行、做咖啡和看老电影。",
       requirements: "希望女生独立、善良，能接受偶尔出差，愿意认真经营关系。",
       photo:
@@ -101,7 +101,7 @@ const seedState = {
       job: "公务员",
       wechat: "yubai_story",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "工作稳定有规律，平时喜欢打网球、听播客，也会认真记录生活里的小事。",
       requirements: "希望对方乐观坦率，愿意一起尝试新鲜事物，工作和生活都有边界感。",
       photo:
@@ -116,7 +116,7 @@ const seedState = {
       job: "UI设计师",
       wechat: "jiayi_design",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "喜欢美术馆、手作和城市短途旅行，性格慢热但很重视承诺。",
       requirements: "希望男生真诚稳定，尊重审美和个人空间，年龄 27-34 岁。",
       photo:
@@ -131,7 +131,7 @@ const seedState = {
       job: "金融分析师",
       wechat: "nanxing_fin",
       vip: true,
-      referralMatchmakerId: "m2",
+      matchmakerIds: ["m2"],
       bio: "项目型工作者，节奏有时很紧，但会给重要关系留出确定时间。",
       requirements: "希望对方成熟独立，能坦诚沟通，对家庭和事业都有清晰规划。",
       photo:
@@ -146,7 +146,7 @@ const seedState = {
       job: "心理咨询师",
       wechat: "yinuo_mind",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "常在外地参加培训，喜欢真实的人和有温度的关系，休息时会做瑜伽。",
       requirements: "希望对方心态开放，能理解彼此的工作节奏，愿意长期认真相处。",
       photo:
@@ -161,7 +161,7 @@ const seedState = {
       job: "产品经理",
       wechat: "jingran_pm",
       vip: false,
-      referralMatchmakerId: null,
+      matchmakerIds: [],
       bio: "互联网产品经理，喜欢潜水、桌游和做计划，正在学习更松弛地生活。",
       requirements: "希望女生有稳定价值观，愿意沟通，彼此支持而不是消耗。",
       photo:
@@ -176,7 +176,7 @@ const seedState = {
       job: "公关顾问",
       wechat: "wantang_pr",
       vip: true,
-      referralMatchmakerId: "m1",
+      matchmakerIds: ["m1"],
       bio: "沟通型人格，喜欢剧场、粤菜和海边散步，期待轻松但认真地相处。",
       requirements: "希望对方情绪稳定，有幽默感，能一起面对现实问题。",
       photo:
@@ -194,15 +194,6 @@ const seedState = {
     { code: "1", matchmakerId: null, used: false, usedBy: null, infinite: true }
   ],
 };
-
-seedState.users.forEach((u) => {
-  if (!u.vipMatchmakerIds) {
-    u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
-  }
-  if (!u.delegatedMatchmakerIds) {
-    u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
-  }
-});
 
 let state = structuredClone(seedState);
 let session = loadSession();
@@ -229,16 +220,11 @@ function ensureStateDefaults(s) {
     if (u.vip && !u.vipExpiresAt) {
       u.vipExpiresAt = "2027-06-11";
     }
-    if (!u.delegatedMatchmakerIds) {
-      u.delegatedMatchmakerIds = u.referralMatchmakerId ? [u.referralMatchmakerId] : ["m1", "m2"];
-    }
-    if (!Array.isArray(u.vipMatchmakerIds)) {
-      u.vipMatchmakerIds = u.vip && u.referralMatchmakerId ? [u.referralMatchmakerId] : [];
-    }
+    if (!Array.isArray(u.matchmakerIds)) u.matchmakerIds = [];
     if (!u.profileByMatchmaker || typeof u.profileByMatchmaker !== "object") {
       u.profileByMatchmaker = {};
     }
-    u.vip = u.vip || u.vipMatchmakerIds.length > 0;
+    u.matchmakerIds = [...new Set(u.matchmakerIds.filter(Boolean))];
     if (u.vip && !u.servicePlan) {
       const legacyPlan = SERVICE_PLANS.monthly;
       u.servicePlan = {
@@ -247,7 +233,7 @@ function ensureStateDefaults(s) {
         name: legacyPlan.name,
         price: legacyPlan.price,
         durationDays: legacyPlan.durationDays,
-        matchmakerId: u.referralMatchmakerId || null,
+        matchmakerId: u.matchmakerIds[0] || null,
         totalMatchLimit: legacyPlan.totalMatchLimit,
         successReward: legacyPlan.successReward,
         startsAt: new Date().toISOString(),
@@ -1003,8 +989,11 @@ function getAgency(id) {
 
 function getUserVipMatchmakerIds(user) {
   if (!user) return [];
-  if (Array.isArray(user.vipMatchmakerIds)) return user.vipMatchmakerIds;
-  return user.vip && user.referralMatchmakerId ? [user.referralMatchmakerId] : [];
+  const plans = Array.isArray(user.servicePlans) ? user.servicePlans : [];
+  const ids = plans
+    .filter((plan) => plan.status === "active" && new Date(plan.expiresAt) > new Date())
+    .flatMap((plan) => plan.matchmakerId ? [plan.matchmakerId] : user.matchmakerIds);
+  return [...new Set(ids.filter(Boolean))];
 }
 
 function isVipForMatchmaker(user, matchmakerId) {
@@ -1013,18 +1002,14 @@ function isVipForMatchmaker(user, matchmakerId) {
 
 function addVipMatchmaker(user, matchmakerId) {
   if (!user || !matchmakerId) return;
-  if (!Array.isArray(user.vipMatchmakerIds)) user.vipMatchmakerIds = getUserVipMatchmakerIds(user);
-  if (!user.vipMatchmakerIds.includes(matchmakerId)) user.vipMatchmakerIds.push(matchmakerId);
-  if (!Array.isArray(user.delegatedMatchmakerIds)) user.delegatedMatchmakerIds = [];
-  if (!user.delegatedMatchmakerIds.includes(matchmakerId)) user.delegatedMatchmakerIds.push(matchmakerId);
-  if (!user.referralMatchmakerId) user.referralMatchmakerId = matchmakerId;
+  if (!Array.isArray(user.matchmakerIds)) user.matchmakerIds = [];
+  if (!user.matchmakerIds.includes(matchmakerId)) user.matchmakerIds.push(matchmakerId);
   user.vip = true;
 }
 
 function getUserBoundMatchmakerIds(user) {
   if (!user) return [];
-  const ids = Array.isArray(user.delegatedMatchmakerIds) ? user.delegatedMatchmakerIds : [];
-  return ids.length ? ids : getUserVipMatchmakerIds(user);
+  return Array.isArray(user.matchmakerIds) ? user.matchmakerIds : [];
 }
 
 function getVisibleProfile(user, matchmakerId) {
@@ -1504,8 +1489,8 @@ function renderMiniApp() {
     const referralInput = $("#referralCodeInput");
     const selectTrigger = $("#referralMatchmakerSelect");
     if (referralInput && selectTrigger) {
-      if (user.referralMatchmakerId && !referralInput.value) {
-        const m = getMatchmaker(user.referralMatchmakerId);
+      if (user.matchmakerIds?.[0] && !referralInput.value) {
+        const m = getMatchmaker(user.matchmakerIds[0]);
         if (m) {
           referralInput.value = m.code;
           const agency = getAgency(m.agencyId);
@@ -1599,10 +1584,10 @@ function renderProfileForm() {
     const container = $("#profileMatchmakersContainer");
     if (container) {
       container.innerHTML = state.matchmakers.map(mm => {
-        const checked = (user.delegatedMatchmakerIds && user.delegatedMatchmakerIds.includes(mm.id)) ? "checked" : "";
+        const checked = user.matchmakerIds?.includes(mm.id) ? "checked" : "";
         return `
           <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
-            <input type="checkbox" name="delegatedMatchmakers" value="${mm.id}" ${checked} />
+            <input type="checkbox" name="matchmakerIds" value="${mm.id}" ${checked} />
             <span>${mm.name}</span>
           </label>
         `;
@@ -1631,7 +1616,7 @@ function renderMineTabContent() {
       registerContainer.innerHTML = state.matchmakers.map(mm => {
         return `
           <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
-            <input type="checkbox" name="delegatedMatchmakers" value="${mm.id}" checked />
+            <input type="checkbox" name="matchmakerIds" value="${mm.id}" checked />
             <span>${mm.name}</span>
           </label>
         `;
@@ -1646,19 +1631,19 @@ function renderMineTabContent() {
     $("#miniMineDetails").textContent = `${user.gender} · ${user.age} 岁 · ${user.city}`;
     
     const badge = $("#miniMineVip");
-    const vipMatchmakerIds = getUserVipMatchmakerIds(user);
-    badge.textContent = vipMatchmakerIds.length ? `${vipMatchmakerIds.length} 位服务红娘` : "普通用户";
+    const serviceMatchmakerIds = getUserVipMatchmakerIds(user);
+    badge.textContent = serviceMatchmakerIds.length ? `${serviceMatchmakerIds.length} 位服务红娘` : "普通用户";
     badge.style.background = user.vip ? "#d9f7e8" : "#fff1c7";
     badge.style.color = user.vip ? "#166534" : "#7a4a08";
 
     // 动态渲染客户数据指标面板
     const userReqs = state.requests.filter(r => r.fromUserId === user.id);
     const unlockedReqs = userReqs.filter(r => r.memberChatEnabled);
-    const referralMm = user.referralMatchmakerId ? getMatchmaker(user.referralMatchmakerId) : null;
+    const firstMatchmaker = user.matchmakerIds?.[0] ? getMatchmaker(user.matchmakerIds[0]) : null;
     const service = getServiceUsage(user);
 
     $("#mineStatRequests").textContent = userReqs.length;
-    $("#mineStatVIP").textContent = vipMatchmakerIds.length ? `${vipMatchmakerIds.length} 位` : "普通";
+    $("#mineStatVIP").textContent = serviceMatchmakerIds.length ? `${serviceMatchmakerIds.length} 位` : "普通";
     $("#mineStatUnlocked").textContent = unlockedReqs.length;
     const serviceSummary = $("#servicePlanSummary");
     if (serviceSummary) {
@@ -1671,8 +1656,8 @@ function renderMineTabContent() {
     }
 
     // 动态设置功能选项菜单内容
-    $("#mineMenuVipStatus").textContent = vipMatchmakerIds.length ? `已绑定 ${vipMatchmakerIds.length} 位红娘` : "开通会员解锁要求";
-    $("#mineMenuMatchmaker").textContent = referralMm ? `${referralMm.name} (${referralMm.code})` : "待分配";
+    $("#mineMenuVipStatus").textContent = serviceMatchmakerIds.length ? `已绑定 ${serviceMatchmakerIds.length} 位红娘` : "开通会员解锁要求";
+    $("#mineMenuMatchmaker").textContent = firstMatchmaker ? `${firstMatchmaker.name} (${firstMatchmaker.code})` : "待分配";
 
     const realNameBadge = $("#miniMineRealNameStatus");
     if (realNameBadge) {
@@ -1724,7 +1709,7 @@ function renderProfiles() {
   }
 
   const profile = profiles[currentDiscoverIndex];
-  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || profile.referralMatchmakerId || null;
+  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || null;
   const profileView = getVisibleProfile(profile, profileMatchmakerId);
   
   const canViewProfile = profileMatchmakerId ? isVipForMatchmaker(user, profileMatchmakerId) : user.vip;
@@ -1733,7 +1718,7 @@ function renderProfiles() {
     : "开通会员后可查看对方的择偶要求";
   const lockedClass = canViewProfile ? "" : " locked";
 
-  const delegatedMms = (profile.delegatedMatchmakerIds || [])
+  const delegatedMms = (profile.matchmakerIds || [])
     .map(id => getMatchmaker(id))
     .filter(Boolean);
 
@@ -1797,7 +1782,7 @@ function showProfileDetail(profileId) {
   const profile = state.users.find(u => u.id === profileId);
   const user = currentUser();
   if (!profile || !user) return;
-  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || profile.referralMatchmakerId || null;
+  const profileMatchmakerId = getUserBoundMatchmakerIds(profile)[0] || null;
   const profileView = getVisibleProfile(profile, profileMatchmakerId);
 
   const canViewProfile = profileMatchmakerId ? isVipForMatchmaker(user, profileMatchmakerId) : user.vip;
@@ -1806,7 +1791,7 @@ function showProfileDetail(profileId) {
     : "开通会员后可查看对方的择偶要求";
   const lockedClass = canViewProfile ? "" : " locked";
 
-  const delegatedMms = (profile.delegatedMatchmakerIds || [])
+  const delegatedMms = (profile.matchmakerIds || [])
     .map(id => getMatchmaker(id))
     .filter(Boolean);
 
@@ -3326,7 +3311,7 @@ function renderCustomers() {
   $("#customerCount").textContent = `${state.users.length} 位`;
   $("#customerRows").innerHTML = state.users
     .map((user) => {
-      const matchmaker = getMatchmaker(user.referralMatchmakerId);
+      const matchmaker = getMatchmaker(user.matchmakerIds?.[0]);
       return `
         <tr>
           <td>${user.name} · ${user.gender} · ${user.age}</td>
@@ -3499,10 +3484,9 @@ async function saveProfile(event) {
   });
   updatedData.age = Number(form.elements.age.value);
 
-  const delegatedMmCheckboxes = form.querySelectorAll('input[name="delegatedMatchmakers"]:checked');
-  const delegatedMatchmakerIds = Array.from(delegatedMmCheckboxes).map(cb => cb.value);
-  updatedData.delegatedMatchmakerIds = delegatedMatchmakerIds;
-  updatedData.referralMatchmakerId = delegatedMatchmakerIds[0] || null;
+  const matchmakerCheckboxes = form.querySelectorAll('input[name="matchmakerIds"]:checked');
+  const matchmakerIds = Array.from(matchmakerCheckboxes).map(cb => cb.value);
+  updatedData.matchmakerIds = matchmakerIds;
   updatedData.syncAllMatchmakers = Boolean(form.elements.syncAllMatchmakers?.checked);
   const previousPublishedProfile = {
     name: user.name,
@@ -3540,7 +3524,7 @@ async function saveProfile(event) {
   } else {
     Object.assign(user, updatedData);
     if (!user.profileByMatchmaker) user.profileByMatchmaker = {};
-    const ids = updatedData.syncAllMatchmakers ? getUserVipMatchmakerIds(user) : delegatedMatchmakerIds;
+    const ids = updatedData.syncAllMatchmakers ? getUserVipMatchmakerIds(user) : matchmakerIds;
     ids.forEach((matchmakerId) => {
       const currentProfile = user.profileByMatchmaker[matchmakerId] || {};
       user.profileByMatchmaker[matchmakerId] = {
@@ -3571,13 +3555,13 @@ async function seedDeal() {
   const latestReq = state.requests[0];
   let clientName = "未知客户";
   let mmName = "平台专属红娘";
-  let referralMatchmakerId = null;
+  let matchmakerId = null;
 
   if (latestReq) {
     const fromUser = state.users.find(u => u.id === latestReq.fromUserId);
     if (fromUser) {
       clientName = fromUser.name;
-      referralMatchmakerId = fromUser.referralMatchmakerId;
+      matchmakerId = fromUser.matchmakerIds?.[0] || null;
     }
     const mm = getMatchmaker(latestReq.matchmakerId);
     if (mm) mmName = mm.name;
@@ -3585,11 +3569,11 @@ async function seedDeal() {
     const randomUser = state.users[Math.floor(Math.random() * state.users.length)];
     if (randomUser) {
       clientName = randomUser.name;
-      referralMatchmakerId = randomUser.referralMatchmakerId;
+      matchmakerId = randomUser.matchmakerIds?.[0] || null;
     }
   }
 
-  const promoMm = referralMatchmakerId ? getMatchmaker(referralMatchmakerId) : state.matchmakers[0];
+  const promoMm = matchmakerId ? getMatchmaker(matchmakerId) : state.matchmakers[0];
   const promoName = promoMm ? promoMm.name : mmName;
 
   if (apiAvailable) {
@@ -3846,8 +3830,8 @@ async function miniRegisterUser(event) {
   const photo = photoPool[Math.floor(Math.random() * photoPool.length)];
   const name = form.elements.name.value.trim();
 
-  const delegatedMmCheckboxes = form.querySelectorAll('input[name="delegatedMatchmakers"]:checked');
-  const delegatedMatchmakerIds = Array.from(delegatedMmCheckboxes).map(cb => cb.value);
+  const matchmakerCheckboxes = form.querySelectorAll('input[name="matchmakerIds"]:checked');
+  const matchmakerIds = Array.from(matchmakerCheckboxes).map(cb => cb.value);
 
   let data;
   try {
@@ -3867,7 +3851,7 @@ async function miniRegisterUser(event) {
         bio: form.elements.bio.value.trim(),
         requirements: form.elements.requirements.value.trim(),
         photo,
-        delegatedMatchmakerIds,
+        matchmakerIds,
       }),
     });
     if (!response.ok) throw new Error("register failed");
@@ -4012,7 +3996,7 @@ function quickAddMember(gender) {
     job: job,
     wechat: wechat,
     vip: Math.random() > 0.6,
-    referralMatchmakerId: Math.random() > 0.3 ? state.matchmakers[Math.floor(Math.random() * state.matchmakers.length)].id : null,
+    matchmakerIds: Math.random() > 0.3 ? [state.matchmakers[Math.floor(Math.random() * state.matchmakers.length)].id] : [],
     bio: bio,
     requirements: req,
     photo: photo

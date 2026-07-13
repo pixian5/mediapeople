@@ -83,13 +83,16 @@ const detailLoading = ref(true);
 const requesting = ref(false);
 const selectedMatchmakerIndex = ref(0);
 
-const boundMatchmakers = computed(() => profile.value?.delegatedMatchmakers || []);
+const boundMatchmakers = computed(() => profile.value?.boundMatchmakers || []);
 const matchmakerNames = computed(() => boundMatchmakers.value.map((item) => `${item.name} (${item.code})`));
 const selectedMatchmaker = computed(() => boundMatchmakers.value[selectedMatchmakerIndex.value] || null);
 const selectedMatchmakerLabel = computed(() => selectedMatchmaker.value ? `${selectedMatchmaker.value.name} (${selectedMatchmaker.value.code})` : '请选择红娘');
 const isVipForSelectedMatchmaker = computed(() => {
-  const vipIds = userStore.profile?.vipMatchmakerIds || [];
-  return selectedMatchmaker.value ? vipIds.includes(selectedMatchmaker.value.id) : false;
+  const servicePlans = userStore.profile?.servicePlans || [];
+  return Boolean(selectedMatchmaker.value && servicePlans.some((plan) =>
+    plan.status === 'active' && new Date(plan.expiresAt) > new Date() &&
+    (!plan.matchmakerId || plan.matchmakerId === selectedMatchmaker.value.id)
+  ));
 });
 const hasMatchRequest = computed(() => !!profile.value?.matchRequest);
 const showGroupChatBtn = computed(() => {
