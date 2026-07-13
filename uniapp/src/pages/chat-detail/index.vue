@@ -28,6 +28,7 @@
       <button
         class="btn-send"
         :class="{ disabled: !canSend }"
+        @mousedown.prevent
         @click="handleSend"
       >发送</button>
     </view>
@@ -235,8 +236,13 @@ const formatTime = (dateStr) => {
 
 const restoreInputFocus = () => {
   if (isH5Runtime) {
+    const focusInput = () => messageInputRef.value?.focus?.();
     nextTick(() => {
-      messageInputRef.value?.focus?.();
+      focusInput();
+      // 点击发送按钮后，浏览器可能在当前事件结束时再次把焦点交给按钮。
+      setTimeout(focusInput, 0);
+      setTimeout(focusInput, 80);
+      setTimeout(focusInput, 180);
     });
     return;
   }
