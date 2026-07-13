@@ -64,6 +64,43 @@ log "===== 开始自动部署 ====="
 
 cd "$REPO_DIR"
 
+# 部署前预检：校验 .env 中的关键密钥，避免服务器仍是默认值时让新容器在启动期崩溃
+# 导致 web 长时间不可用。失败直接退出，不要走 docker build 那条路。
+log "正在校验 /opt/matchmaker/.env 关键密钥..."
+if [ ! -f "$REPO_DIR/.env" ]; then
+  log "ERROR: $REPO_DIR/.env 不存在，请先按 .env.example 创建并填入强密钥"
+  exit 1
+fi
+# 用 set -a 让 .env 中的 KEY=VALUE 自动 export，再用同名变量读取
+set -a
+# shellcheck disable=SC1091
+. "$REPO_DIR/.env"
+set +a
+
+ENV_ERRORS=()
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+  ENV_ERRORS+=("POSTGRES_PASSWORD 未设置")
+fi
+if [ -z "${JWT_SECRET:-}" ] || [ "${JWT_SECRET}" = "matchmaker-dev-secret-change-me" ]; then
+  ENV_ERRORS+=("JWT_SECRET 未设置或仍是默认值")
+elif [ "${#JWT_SECRET}" -lt 16 ]; then
+  ENV_ERRORS+=("JWT_SECRET 长度必须 >= 16（当前 ${#JWT_SECRET}）")
+fi
+if [ -z "${ADMIN_PASSWORD:-}" ] || [ "${ADMIN_PASSWORD}" = "admin" ]; then
+  ENV_ERRORS+=("ADMIN_PASSWORD 未设置或仍是默认值 admin")
+elif [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+  ENV_ERRORS+=("ADMIN_PASSWORD 长度必须 >= 8（当前 ${#ADMIN_PASSWORD}）")
+fi
+if [ "${#ENV_ERRORS[@]}" -gt 0 ]; then
+  log "ERROR: .env 预检失败："
+  for err in "${ENV_ERRORS[@]}"; do
+    log "  - $err"
+  done
+  log "请先到服务器修改 $REPO_DIR/.env，再用新密钥重新部署。"
+  exit 1
+fi
+log ".env 预检通过"
+
 PREVIOUS_HEAD="$(git rev-parse HEAD 2>/dev/null || echo '')"
 CURRENT_HEAD=""
 H5_BUILD_STAMP="$REPO_DIR/uniapp/dist/build/h5/.build-commit"
