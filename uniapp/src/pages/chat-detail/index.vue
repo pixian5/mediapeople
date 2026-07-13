@@ -23,6 +23,7 @@
         :focus="inputFocused"
         placeholder="发送消息"
         @confirm="handleSend"
+        @keydown.enter.prevent="handleSend"
         confirm-type="send"
       />
       <button
@@ -237,6 +238,11 @@ const upsertMessage = (message) => {
 };
 
 const handleRealtimeMessage = (event) => {
+  if (event?.type === 'socket_open') {
+    // socket 重连成功后补拉最新消息，避免漏掉断线期间的消息
+    syncLatestMessages(true);
+    return;
+  }
   if (event?.type !== 'chat_message') return;
   if (event.message?.threadId !== threadId.value) return;
   reconcileTempMessage(event.message);
@@ -362,7 +368,10 @@ const handleSend = async () => {
     }
     syncLatestMessages();
   } catch (error) {
-    removeTempMessage(tempId);
+    // 不删除临时消息，标记为发送失败状态，便于用户重试
+    messages.value = messages.value.map((msg) =>
+      msg.id === tempId ? { ...msg, sendFailed: true } : msg
+    );
     uni.showToast({ title: '发送失败', icon: 'none' });
   } finally {
     pendingSendCount.value = Math.max(0, pendingSendCount.value - 1);
@@ -372,6 +381,10 @@ const handleSend = async () => {
 
 <style lang="scss" scoped>
 @import '@/styles/variables.scss';
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
 .chat-detail-container {
   display: flex;

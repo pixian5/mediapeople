@@ -1,5 +1,6 @@
 <template>
   <view class="workbench-container">
+    <view v-if="loading" class="loading-tip">加载中…</view>
     <!-- 顶部红娘信息 -->
     <view class="header-card">
       <view class="header-top">
@@ -30,30 +31,30 @@
         </view>
         <!-- 请求操作区 -->
         <view v-if="item.type === 'request'" class="card-actions">
-          <button class="btn-sm btn-secondary" @click="contactSide(item.id, 'male')">私聊男方</button>
-          <button class="btn-sm btn-secondary" @click="contactSide(item.id, 'female')">私聊女方</button>
-          <button v-if="hasGroupThread(item.id)" class="btn-sm btn-primary" @click="openChat(threadForGroup(item.id)?.id)">三方群聊</button>
+          <button class="btn-sm btn-secondary" :disabled="actionLoading" @click="contactSide(item.id, 'male')">私聊男方</button>
+          <button class="btn-sm btn-secondary" :disabled="actionLoading" @click="contactSide(item.id, 'female')">私聊女方</button>
+          <button v-if="hasGroupThread(item.id)" class="btn-sm btn-primary" :disabled="actionLoading" @click="openChat(threadForGroup(item.id)?.id)">三方群聊</button>
         </view>
         <view v-if="item.type === 'request'" class="card-extra">
           <view class="chat-toggle">
             <text>男女双方私聊：{{ item.memberChatEnabled ? '已开启' : '已关闭' }}</text>
-            <button class="btn-sm btn-ghost" @click="toggleMemberChat(item.id, !item.memberChatEnabled)">
+            <button class="btn-sm btn-ghost" :disabled="actionLoading" @click="toggleMemberChat(item.id, !item.memberChatEnabled)">
               {{ item.memberChatEnabled ? '关闭双方私聊' : '开启双方私聊' }}
             </button>
           </view>
           <view class="progress-actions">
             <text class="progress-text">进度：{{ item.serviceStage || '待首次推荐' }}</text>
             <view class="btn-row">
-              <button class="btn-sm btn-secondary" @click="updateProgress(item.id, 'follow_up')">记录跟进</button>
-              <button class="btn-sm btn-secondary" @click="updateProgress(item.id, 'effective_match')">有效匹配</button>
-              <button class="btn-sm btn-ghost" @click="updateProgress(item.id, 'not_fit')">不合适</button>
+              <button class="btn-sm btn-secondary" :disabled="actionLoading" @click="updateProgress(item.id, 'follow_up')">记录跟进</button>
+              <button class="btn-sm btn-secondary" :disabled="actionLoading" @click="updateProgress(item.id, 'effective_match')">有效匹配</button>
+              <button class="btn-sm btn-ghost" :disabled="actionLoading" @click="updateProgress(item.id, 'not_fit')">不合适</button>
             </view>
           </view>
         </view>
         <!-- 资料审核操作区 -->
         <view v-if="item.type === 'profile'" class="card-actions">
-          <button class="btn-sm btn-primary" @click="reviewProfile(item.userId, 'approve')">审核通过</button>
-          <button class="btn-sm btn-ghost" @click="reviewProfile(item.userId, 'reject')">退回修改</button>
+          <button class="btn-sm btn-primary" :disabled="actionLoading" @click="reviewProfile(item.userId, 'approve')">审核通过</button>
+          <button class="btn-sm btn-ghost" :disabled="actionLoading" @click="reviewProfile(item.userId, 'reject')">退回修改</button>
         </view>
       </view>
     </view>
@@ -100,6 +101,7 @@ const appStore = useAppStore();
 
 const mmId = computed(() => userStore.matchmakerId);
 const actionLoading = ref(false);
+const loading = ref(false);
 
 onShow(() => {
   loadData();
@@ -110,8 +112,13 @@ onPullDownRefresh(() => {
 });
 
 const loadData = async () => {
-  await appStore.fetchState();
-  uni.stopPullDownRefresh();
+  loading.value = true;
+  try {
+    await appStore.fetchState();
+  } finally {
+    loading.value = false;
+    uni.stopPullDownRefresh();
+  }
 };
 
 // 当前红娘的请求
@@ -282,6 +289,20 @@ const handleLogout = () => {
   min-height: 100vh;
   padding: $spacing-md;
   background: $color-bg;
+}
+
+.loading-tip {
+  position: fixed;
+  top: 24rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 12rpx 28rpx;
+  background: rgba(15, 118, 110, 0.92);
+  color: #ffffff;
+  font-size: $font-sm;
+  border-radius: $radius-round;
+  box-shadow: 0 8rpx 24rpx rgba(15, 118, 110, 0.24);
 }
 
 .header-card {

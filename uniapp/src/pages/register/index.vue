@@ -30,11 +30,11 @@
       </view>
       <view class="form-group">
         <text class="form-label">密码</text>
-        <input class="form-input" v-model="form.password" type="text" placeholder="请输入至少6位密码" />
+        <input class="form-input" v-model="form.password" type="password" password placeholder="请输入至少6位密码" />
       </view>
       <view class="form-group">
         <text class="form-label">确认密码</text>
-        <input class="form-input" v-model="form.passwordConfirm" type="text" placeholder="请再次输入密码" />
+        <input class="form-input" v-model="form.passwordConfirm" type="password" password placeholder="请再次输入密码" />
       </view>
       
       <button class="btn-primary" @click="handleRegister" :class="{ disabled: loading }">
@@ -73,29 +73,38 @@ const handleRegister = async () => {
     uni.showToast({ title: '请填写完整信息', icon: 'none' });
     return;
   }
-  if (form.password.length < 6) {
-    uni.showToast({ title: '密码至少6位', icon: 'none' });
+  if (form.name.length > 30) {
+    uni.showToast({ title: '昵称不能超过30字', icon: 'none' });
+    return;
+  }
+  if (form.age && (Number(form.age) < 18 || Number(form.age) > 99)) {
+    uni.showToast({ title: '年龄需在18-99之间', icon: 'none' });
+    return;
+  }
+  if (form.password.length < 6 || form.password.length > 64) {
+    uni.showToast({ title: '密码长度需为6-64位', icon: 'none' });
     return;
   }
   if (form.password !== form.passwordConfirm) {
     uni.showToast({ title: '两次密码不一致', icon: 'none' });
     return;
   }
-  
+
   loading.value = true;
   try {
     // 提交注册数据，去掉 passwordConfirm
     const { passwordConfirm, ...submitData } = form;
     // 根据账号格式智能判断是手机号还是邮箱
-    const isPhone = /^\d{11}$/.test(form.account);
-    const isEmail = form.account.includes('@');
+    const isPhone = /^1[3-9]\d{9}$/.test(form.account);
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.account);
     if (isPhone) {
       submitData.phone = form.account;
     } else if (isEmail) {
       submitData.email = form.account;
     } else {
-      // 默认当作手机号处理（兼容旧逻辑）
-      submitData.phone = form.account;
+      uni.showToast({ title: '账号需为有效手机号或邮箱', icon: 'none' });
+      loading.value = false;
+      return;
     }
     await registerApi(submitData);
     
@@ -124,7 +133,7 @@ const handleRegister = async () => {
 };
 
 const goToLogin = () => {
-  uni.navigateBack();
+  uni.redirectTo({ url: '/pages/login/index' });
 };
 </script>
 

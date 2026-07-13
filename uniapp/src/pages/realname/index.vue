@@ -48,15 +48,18 @@ onLoad(() => {
         uni.navigateBack();
       }, 1500);
     }
+    // 不预填身份证号（敏感信息不回显），仅预填姓名
     form.realName = userStore.profile.realName || '';
-    form.idCard = userStore.profile.idCard || '';
-    form.phone = userStore.profile.phone || '';
   }
 });
 
 const handleSubmit = async () => {
   if (!form.realName || !form.idCard || !form.phone) {
     uni.showToast({ title: '请填写完整信息', icon: 'none' });
+    return;
+  }
+  if (!/^1[3-9]\d{9}$/.test(form.phone)) {
+    uni.showToast({ title: '手机号格式不正确', icon: 'none' });
     return;
   }
   if (!/^\d{17}[\dXx]$/.test(form.idCard)) {

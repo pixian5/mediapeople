@@ -153,13 +153,16 @@ function renewServicePlan(currentPlan, planId, matchmakerId) {
   const currentExpiry = new Date(currentPlan.expiresAt);
   const extensionStart = currentExpiry > now ? currentExpiry : now;
   const renewed = createServicePlan(extensionStart, planId, matchmakerId);
+  // 跨周续期时重置 weekly 计数
+  const currentWeekKey = serviceWeekKey();
+  const isSameWeek = currentPlan.weekKey === currentWeekKey;
   return {
     ...renewed,
     subscriptionId: currentPlan.subscriptionId,
     startsAt: currentPlan.startsAt || renewed.startsAt,
-    weekKey: currentPlan.weekKey,
-    weeklyMatchUsed: Number(currentPlan.weeklyMatchUsed || 0),
-    weeklyFollowupUsed: Number(currentPlan.weeklyFollowupUsed || 0),
+    weekKey: currentWeekKey,
+    weeklyMatchUsed: isSameWeek ? Number(currentPlan.weeklyMatchUsed || 0) : 0,
+    weeklyFollowupUsed: isSameWeek ? Number(currentPlan.weeklyFollowupUsed || 0) : 0,
     totalMatchUsed: Number(currentPlan.totalMatchUsed || 0),
   };
 }
@@ -200,11 +203,15 @@ function findSensitiveWords(text) {
 
 // 替换敏感词为 *
 function maskSensitiveWords(text) {
-  if (!text || typeof text !== "string") return text;
   let result = text;
   for (const word of SENSITIVE_WORDS) {
-    while (result.includes(word)) {
-      result = result.replace(word, "*".repeat(word.length));
+    const lowerWord = word.toLowerCase();
+    const lowerResult = result.toLowerCase();
+    let idx = lowerResult.indexOf(lowerWord);
+    while (idx !== -1) {
+      result = result.slice(0, idx) + "*".repeat(word.length) + result.slice(idx + word.length);
+      const newLower = result.toLowerCase();
+      idx = newLower.indexOf(lowerWord, idx + word.length);
     }
   }
   return result;
@@ -395,6 +402,13 @@ seedState.users.forEach((u) => {
   // 为种子用户设置默认密码 "123456"，防止无密码即可登录
   if (!u.passwordHash) {
     u.passwordHash = hashPassword("123456");
+  }
+});
+
+seedState.matchmakers.forEach((mm) => {
+  // 为种子红娘设置默认密码 "123456"，防止无密码即可登录
+  if (!mm.passwordHash) {
+    mm.passwordHash = hashPassword("123456");
   }
 });
 
@@ -661,7 +675,10 @@ function verifyToken(token) {
   if (!token || !token.includes(".")) return null;
   const [encoded, signature] = token.split(".");
   const expected = crypto.createHmac("sha256", EFFECTIVE_TOKEN_SECRET).update(encoded).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return null;
+  if (!crypto.timingSafeEqual(sigBuf, expBuf)) return null;
   const payload = base64UrlDecode(encoded);
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
@@ -703,22 +720,65 @@ function verifyPassword(password, storedHash) {
   return crypto.timingSafeEqual(current, Buffer.from(hash, "hex"));
 }
 
-function publicState(data, viewerRole = "admin") {
-  // 默认 viewerRole="admin" 保留 phone/email/realName 等，用于登录/注册返回自己信息。
-  // 调用方需要按角色脱敏时显式传 viewerRole，非 admin 会移除其他用户的隐私字段。
+function publicState(data, viewerRole = "admin", viewerId = null) {
+  // 默认 viewerRole="admin" 保留全部数据，用于 admin 操作和登录/注册返回自己信息。
+  // 非 admin 时：
+  //   - users: 脱敏其他用户的 phone/email/realName
+  //   - matchmakers: 脱敏 phone/email
+  //   - chatMessages/chatThreads/deals/promoCodes: 只返回与 viewer 相关的子集
   const sanitizeUser = (rawUser) => {
     const { passwordHash, idCard, ...rest } = rawUser;
     if (viewerRole === "admin") return rest;
+    if (rawUser.id === viewerId) return rest;
     const { phone, email, realName, ...publicFields } = rest;
     return publicFields;
   };
+  const sanitizeMatchmaker = (rawMatchmaker) => {
+    const { passwordHash, ...matchmaker } = ensureMatchmakerMetrics({ ...rawMatchmaker });
+    if (viewerRole === "admin") return matchmaker;
+    const { phone, email, ...publicFields } = matchmaker;
+    return publicFields;
+  };
+
+  if (viewerRole === "admin") {
+    return {
+      ...data,
+      users: (data.users || []).map(sanitizeUser),
+      matchmakers: (data.matchmakers || []).map(sanitizeMatchmaker),
+    };
+  }
+
+  // 非 admin: 只返回与 viewer 相关的数据子集
+  const viewerMatchmakerIds = new Set(
+    (data.matchmakers || [])
+      .filter((mm) => mm.id === viewerId || (mm.boundUserIds || []).includes(viewerId))
+      .map((mm) => mm.id),
+  );
+  // 收集 viewer 参与的所有 request id
+  const relatedRequestIds = new Set();
+  for (const req of data.requests || []) {
+    if (req.fromUserId === viewerId || req.toUserId === viewerId || req.matchmakerId === viewerId || viewerMatchmakerIds.has(req.matchmakerId)) {
+      relatedRequestIds.add(req.id);
+    }
+  }
+  // 收集 viewer 可访问的 thread id
+  const relatedThreadIds = new Set();
+  for (const thread of data.chatThreads || []) {
+    const participants = Array.isArray(thread.participants) ? thread.participants : [];
+    const participantIds = participants.map((p) => (typeof p === "object" ? p.id : p)).filter(Boolean);
+    if (participantIds.includes(viewerId) || viewerMatchmakerIds.size > 0) {
+      relatedThreadIds.add(thread.id);
+    }
+  }
+
   return {
     ...data,
     users: (data.users || []).map(sanitizeUser),
-    matchmakers: (data.matchmakers || []).map((rawMatchmaker) => {
-      const { passwordHash, ...matchmaker } = ensureMatchmakerMetrics({ ...rawMatchmaker });
-      return matchmaker;
-    }),
+    matchmakers: (data.matchmakers || []).map(sanitizeMatchmaker),
+    chatThreads: (data.chatThreads || []).filter((t) => relatedThreadIds.has(t.id)),
+    chatMessages: (data.chatMessages || []).filter((m) => relatedThreadIds.has(m.threadId)),
+    deals: (data.deals || []).filter((d) => relatedRequestIds.has(d.requestId) || d.userId === viewerId),
+    promoCodes: (data.promoCodes || []).filter((p) => p.usedBy === viewerId),
   };
 }
 
@@ -1012,6 +1072,14 @@ function validateEmail(value) {
 function validateName(value) {
   const name = String(value || "").trim();
   return NAME_PATTERN.test(name) ? name : null;
+}
+
+function validatePhotoUrl(url) {
+  if (!url) return null;
+  const trimmed = String(url).trim().slice(0, 500);
+  if (!trimmed) return null;
+  if (/^javascript:/i.test(trimmed) || /^data:/i.test(trimmed)) return null;
+  return trimmed;
 }
 
 function validateWechat(value) {
@@ -1548,7 +1616,7 @@ app.post("/api/auth/client/login", async (request, response) => {
     response.status(401).json({ error: "invalid_credentials" });
     return;
   }
-  if (user.passwordHash && !verifyPassword(String(password || ""), user.passwordHash)) {
+  if (!user.passwordHash || !verifyPassword(String(password || ""), user.passwordHash)) {
     response.status(401).json({ error: "invalid_credentials" });
     return;
   }
@@ -1578,7 +1646,7 @@ app.post("/api/auth/matchmaker/login", async (request, response) => {
     response.status(401).json({ error: "invalid_credentials" });
     return;
   }
-  if (matchmaker.passwordHash && !verifyPassword(String(password || ""), matchmaker.passwordHash)) {
+  if (!matchmaker.passwordHash || !verifyPassword(String(password || ""), matchmaker.passwordHash)) {
     response.status(401).json({ error: "invalid_credentials" });
     return;
   }
@@ -1664,7 +1732,7 @@ app.post("/api/auth/client/register", async (request, response) => {
     profileByMatchmaker: {},
     bio: trimStr(input.bio, 500),
     requirements: trimStr(input.requirements, 500),
-    photo: input.photo || null,
+    photo: validatePhotoUrl(input.photo),
   };
   try {
     await pool.query(
@@ -1750,26 +1818,7 @@ app.post("/api/auth/matchmaker/register", async (request, response) => {
 
 app.get("/api/state", requireAuth(["admin", "client", "matchmaker"]), async (request, response) => {
   const state = await readState();
-  // 非管理员只保留自己完整的用户信息，其他用户脱敏（去掉 phone/email/realName）。
-  if (request.user.role === "admin") {
-    response.json(publicState(state, "admin"));
-    return;
-  }
-  const selfId = request.user.sub;
-  const sanitized = {
-    ...state,
-    users: (state.users || []).map((rawUser) => {
-      const { passwordHash, idCard, ...rest } = rawUser;
-      if (rawUser.id === selfId) return rest;
-      const { phone, email, realName, ...publicFields } = rest;
-      return publicFields;
-    }),
-    matchmakers: (state.matchmakers || []).map((rawMatchmaker) => {
-      const { passwordHash, ...matchmaker } = ensureMatchmakerMetrics({ ...rawMatchmaker });
-      return matchmaker;
-    }),
-  };
-  response.json(sanitized);
+  response.json(publicState(state, request.user.role, request.user.sub));
 });
 
 app.put("/api/state", requireAuth(["admin"]), async (request, response) => {
@@ -1779,12 +1828,12 @@ app.put("/api/state", requireAuth(["admin"]), async (request, response) => {
     return;
   }
   await writeState(request.body);
-  response.json(publicState(await readState()));
+  response.json(publicState(await readState(), request.user.role, request.user.sub));
 });
 
-app.post("/api/reset", requireAuth(["admin"]), async (_request, response) => {
+app.post("/api/reset", requireAuth(["admin"]), async (request, response) => {
   await writeState(seedState);
-  response.json(publicState(await readState()));
+  response.json(publicState(await readState(), request.user.role, request.user.sub));
 });
 
 // ==========================================
@@ -1829,7 +1878,7 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
   user.wechat = wechat !== undefined ? (validateWechat(wechat) || user.wechat) : user.wechat;
   user.bio = bio !== undefined ? trimStr(bio, 500) : user.bio;
   user.requirements = requirements !== undefined ? trimStr(requirements, 500) : user.requirements;
-  user.photo = photo !== undefined ? String(photo).trim().slice(0, 500) : (avatar !== undefined ? String(avatar).trim().slice(0, 500) : user.photo);
+  user.photo = photo !== undefined ? validatePhotoUrl(photo) : (avatar !== undefined ? validatePhotoUrl(avatar) : user.photo);
 
   const profilePayload = buildMatchmakerProfilePayload(user);
   for (const matchmakerId of user.matchmakerIds) {
@@ -1847,7 +1896,7 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
     `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, raw = $7, updated_at = now() where id = $8`,
     [user.name, user.gender, user.age, user.city, user.job, user.wechat, JSON.stringify(user), userId]
   );
-  response.json({ user, state: publicState(await readState()) });
+  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 app.patch("/api/matchmaker/users/:id/profile-review", requireAuth(["matchmaker"]), async (request, response) => {
@@ -1873,7 +1922,7 @@ app.patch("/api/matchmaker/users/:id/profile-review", requireAuth(["matchmaker"]
   user.profileByMatchmaker[matchmakerId] = profile;
 
   await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(user), userId]);
-  response.json({ user, state: publicState(await readState()) });
+  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2. 客户：提交实名认证（公安二要素模拟 + 18岁门槛）
@@ -1932,7 +1981,7 @@ app.post("/api/client/real-name", requireAuth(["client"]), async (request, respo
     `update users set phone = $1, age = $2, real_name_verified = true, raw = $3, updated_at = now() where id = $4`,
     [user.phone || null, age, JSON.stringify(user), userId]
   );
-  response.json({ user, state: publicState(await readState()) });
+  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.1 客户：提交学历认证（学信网模拟）
@@ -1977,7 +2026,7 @@ app.post("/api/client/education-verify", requireAuth(["client"]), async (request
     [JSON.stringify(user), userId]
   );
   invalidateStateCache();
-  response.json({ user, state: publicState(await readState()) });
+  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.2 客户：提交视频认证（活体检测模拟）
@@ -2012,7 +2061,7 @@ app.post("/api/client/video-verify", requireAuth(["client"]), async (request, re
     [JSON.stringify(user), userId]
   );
   invalidateStateCache();
-  response.json({ user, state: publicState(await readState()) });
+  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.3 客户：获取自己的认证状态
@@ -2065,8 +2114,20 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
         await client.query("rollback");
         return response.status(400).json({ error: "code_already_used" });
       }
-
-      if (!promo.infinite) {
+      // infinite 兑换码也记录使用者列表，同一用户只能使用一次
+      if (promo.infinite) {
+        promo.usedByList = Array.isArray(promo.usedByList) ? promo.usedByList : [];
+        if (promo.usedByList.includes(userId)) {
+          await client.query("rollback");
+          return response.status(409).json({ error: "code_already_redeemed", message: "您已使用过此兑换码" });
+        }
+        promo.usedByList.push(userId);
+        promo.usedBy = userId;
+        await client.query(
+          "update promo_codes set used_by = $1, raw = $2, updated_at = now() where upper(code) = upper($3)",
+          [userId, JSON.stringify(promo), code.trim()]
+        );
+      } else {
         promo.used = true;
         promo.usedBy = userId;
         await client.query(
@@ -2080,14 +2141,14 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
       // 兑换码的权益由后台签发时确定，不能由客户端自行升级套餐。
       selectedPlanId = promo.planId && SERVICE_PLANS[promo.planId] ? promo.planId : "monthly";
     } else if (referralCode) {
-      // 推荐码支付
+      // 推荐码路径：仅赠送体验卡，不允许客户端自行升级到高价套餐（需走真实支付流程）
       const mmRes = await client.query("select id from matchmakers where upper(code) = upper($1)", [referralCode.trim()]);
       if (mmRes.rows.length === 0) {
         await client.query("rollback");
         return response.status(404).json({ error: "invalid_referral_code" });
       }
       matchmakerId = mmRes.rows[0].id;
-      selectedPlanId = SERVICE_PLANS[planId] ? planId : "monthly";
+      selectedPlanId = "trial_3d";
     } else {
       await client.query("rollback");
       return response.status(400).json({ error: "code_or_referral_code_required" });
@@ -2138,7 +2199,7 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
 
     await client.query("commit");
     invalidateStateCache();
-    response.json({ user, state: publicState(await readState()) });
+    response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
   } catch (err) {
     await client.query("rollback");
     console.error(err);
@@ -2265,7 +2326,7 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
         memberThreadId: null,
         groupThreadId: groupThread.id,
       },
-      state: publicState(await readState()),
+      state: publicState(await readState(), request.user.role, request.user.sub),
     });
   } catch (error) {
     try { await client.query("rollback"); } catch (_) {}
@@ -2285,90 +2346,132 @@ app.patch("/api/matchmaker/requests/:id/contacted", requireAuth(["matchmaker"]),
     return response.status(400).json({ error: "contact_side_required" });
   }
 
-  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
-  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
-  const req = ensureRequestDefaults(reqRes.rows[0].raw);
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const reqRes = await client.query("select raw from match_requests where id = $1 for update", [requestId]);
+    if (reqRes.rows.length === 0) {
+      await client.query("rollback");
+      return response.status(404).json({ error: "request_not_found" });
+    }
+    const req = ensureRequestDefaults(reqRes.rows[0].raw);
 
-  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
-  if (rejectTerminalRequest(req, response)) return;
+    if (req.matchmakerId !== matchmakerId) {
+      await client.query("rollback");
+      return response.status(403).json({ error: "forbidden" });
+    }
+    if (rejectTerminalRequest(req, response)) {
+      await client.query("rollback");
+      return;
+    }
 
-  if (side === "male") req.maleContacted = true;
-  if (side === "female") req.femaleContacted = true;
-  req.status = getRequestContactStatus(req);
-  await pool.query(
-    "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
-    [req.status, JSON.stringify(req), requestId]
-  );
-  if (isGroupChatAllowed(req)) {
-    const groupThread = buildMatchmakerGroupThread(req);
-    await pool.query(
-      `insert into chat_threads (id, type, request_id, status, participants, raw)
-       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-       on conflict (id) do nothing`,
-      [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+    if (side === "male") req.maleContacted = true;
+    if (side === "female") req.femaleContacted = true;
+    req.status = getRequestContactStatus(req);
+    await client.query(
+      "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
+      [req.status, JSON.stringify(req), requestId]
     );
+    if (isGroupChatAllowed(req)) {
+      const groupThread = buildMatchmakerGroupThread(req);
+      await client.query(
+        `insert into chat_threads (id, type, request_id, status, participants, raw)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+         on conflict (id) do nothing`,
+        [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+      );
+    }
+    await client.query("commit");
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
+  } catch (err) {
+    try { await client.query("rollback"); } catch {}
+    console.error("contacted error:", err);
+    response.status(500).json({ error: "internal_error" });
+  } finally {
+    client.release();
   }
-  response.json({ request: req, state: publicState(await readState()) });
 });
 
 app.patch("/api/matchmaker/requests/:id/approve-member-chat", requireAuth(["matchmaker"]), async (request, response) => {
   const requestId = request.params.id;
   const matchmakerId = request.user.sub;
 
-  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
-  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
-  const req = ensureRequestDefaults(reqRes.rows[0].raw);
-  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
-  if (rejectTerminalRequest(req, response)) return;
-  req.memberChatEnabled = true;
-  await pool.query(
-    "update match_requests set raw = $1, updated_at = now() where id = $2",
-    [JSON.stringify(req), requestId]
-  );
-
-  const threadRes = await pool.query(
-    "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
-    [requestId]
-  );
-  if (threadRes.rows.length === 0) {
-    const memberThread = buildMemberMemberThread(req);
-    await pool.query(
-      `insert into chat_threads (id, type, request_id, status, participants, raw)
-       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-       on conflict do nothing`,
-      [
-        memberThread.id,
-        memberThread.type,
-        memberThread.requestId,
-        memberThread.status,
-        JSON.stringify(memberThread.participants),
-        JSON.stringify(memberThread),
-      ]
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const reqRes = await client.query("select raw from match_requests where id = $1 for update", [requestId]);
+    if (reqRes.rows.length === 0) {
+      await client.query("rollback");
+      return response.status(404).json({ error: "request_not_found" });
+    }
+    const req = ensureRequestDefaults(reqRes.rows[0].raw);
+    if (req.matchmakerId !== matchmakerId) {
+      await client.query("rollback");
+      return response.status(403).json({ error: "forbidden" });
+    }
+    if (rejectTerminalRequest(req, response)) {
+      await client.query("rollback");
+      return;
+    }
+    req.memberChatEnabled = true;
+    await client.query(
+      "update match_requests set raw = $1, updated_at = now() where id = $2",
+      [JSON.stringify(req), requestId]
     );
-  }
 
-  const groupThreadRes = await pool.query(
-    "select id from chat_threads where request_id = $1 and type = 'matchmaker_group' limit 1",
-    [requestId]
-  );
-  if (groupThreadRes.rows.length === 0) {
-    const groupThread = buildMatchmakerGroupThread(req);
-    await pool.query(
-      `insert into chat_threads (id, type, request_id, status, participants, raw)
-       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-       on conflict (id) do nothing`,
-      [
-        groupThread.id,
-        groupThread.type,
-        groupThread.requestId,
-        groupThread.status,
-        JSON.stringify(groupThread.participants),
-        JSON.stringify(groupThread),
-      ]
+    const threadRes = await client.query(
+      "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
+      [requestId]
     );
-  }
+    if (threadRes.rows.length === 0) {
+      const memberThread = buildMemberMemberThread(req);
+      await client.query(
+        `insert into chat_threads (id, type, request_id, status, participants, raw)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+         on conflict do nothing`,
+        [
+          memberThread.id,
+          memberThread.type,
+          memberThread.requestId,
+          memberThread.status,
+          JSON.stringify(memberThread.participants),
+          JSON.stringify(memberThread),
+        ]
+      );
+    }
 
-  response.json({ request: req, state: publicState(await readState()) });
+    const groupThreadRes = await client.query(
+      "select id from chat_threads where request_id = $1 and type = 'matchmaker_group' limit 1",
+      [requestId]
+    );
+    if (groupThreadRes.rows.length === 0) {
+      const groupThread = buildMatchmakerGroupThread(req);
+      await client.query(
+        `insert into chat_threads (id, type, request_id, status, participants, raw)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+         on conflict (id) do nothing`,
+        [
+          groupThread.id,
+          groupThread.type,
+          groupThread.requestId,
+          groupThread.status,
+          JSON.stringify(groupThread.participants),
+          JSON.stringify(groupThread),
+        ]
+      );
+    }
+
+    await client.query("commit");
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
+  } catch (err) {
+    try { await client.query("rollback"); } catch {}
+    console.error("approve-member-chat error:", err);
+    response.status(500).json({ error: "internal_error" });
+  } finally {
+    client.release();
+  }
 });
 
 app.patch("/api/matchmaker/requests/:id/member-chat", requireAuth(["matchmaker"]), async (request, response) => {
@@ -2376,49 +2479,70 @@ app.patch("/api/matchmaker/requests/:id/member-chat", requireAuth(["matchmaker"]
   const matchmakerId = request.user.sub;
   const enabled = Boolean(request.body?.enabled);
 
-  const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
-  if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
-  const req = ensureRequestDefaults(reqRes.rows[0].raw);
-  if (req.matchmakerId !== matchmakerId) return response.status(403).json({ error: "forbidden" });
-  if (rejectTerminalRequest(req, response)) return;
-
-  req.memberChatEnabled = enabled;
-  await pool.query(
-    "update match_requests set raw = $1, updated_at = now() where id = $2",
-    [JSON.stringify(req), requestId]
-  );
-
-  if (enabled) {
-    const threadRes = await pool.query(
-      "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
-      [requestId]
-    );
-    if (threadRes.rows.length === 0) {
-      const memberThread = buildMemberMemberThread(req);
-      await pool.query(
-        `insert into chat_threads (id, type, request_id, status, participants, raw)
-         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-         on conflict do nothing`,
-        [memberThread.id, memberThread.type, memberThread.requestId, memberThread.status, JSON.stringify(memberThread.participants), JSON.stringify(memberThread)]
-      );
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const reqRes = await client.query("select raw from match_requests where id = $1 for update", [requestId]);
+    if (reqRes.rows.length === 0) {
+      await client.query("rollback");
+      return response.status(404).json({ error: "request_not_found" });
+    }
+    const req = ensureRequestDefaults(reqRes.rows[0].raw);
+    if (req.matchmakerId !== matchmakerId) {
+      await client.query("rollback");
+      return response.status(403).json({ error: "forbidden" });
+    }
+    if (rejectTerminalRequest(req, response)) {
+      await client.query("rollback");
+      return;
     }
 
-    const groupThreadRes = await pool.query(
-      "select id from chat_threads where request_id = $1 and type = 'matchmaker_group' limit 1",
-      [requestId]
+    req.memberChatEnabled = enabled;
+    await client.query(
+      "update match_requests set raw = $1, updated_at = now() where id = $2",
+      [JSON.stringify(req), requestId]
     );
-    if (groupThreadRes.rows.length === 0) {
-      const groupThread = buildMatchmakerGroupThread(req);
-      await pool.query(
-        `insert into chat_threads (id, type, request_id, status, participants, raw)
-         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-         on conflict (id) do nothing`,
-        [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+
+    if (enabled) {
+      const threadRes = await client.query(
+        "select id from chat_threads where request_id = $1 and type = 'member_member' limit 1",
+        [requestId]
       );
+      if (threadRes.rows.length === 0) {
+        const memberThread = buildMemberMemberThread(req);
+        await client.query(
+          `insert into chat_threads (id, type, request_id, status, participants, raw)
+           values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+           on conflict do nothing`,
+          [memberThread.id, memberThread.type, memberThread.requestId, memberThread.status, JSON.stringify(memberThread.participants), JSON.stringify(memberThread)]
+        );
+      }
+
+      const groupThreadRes = await client.query(
+        "select id from chat_threads where request_id = $1 and type = 'matchmaker_group' limit 1",
+        [requestId]
+      );
+      if (groupThreadRes.rows.length === 0) {
+        const groupThread = buildMatchmakerGroupThread(req);
+        await client.query(
+          `insert into chat_threads (id, type, request_id, status, participants, raw)
+           values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+           on conflict (id) do nothing`,
+          [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
+        );
+      }
     }
+
+    await client.query("commit");
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
+  } catch (err) {
+    try { await client.query("rollback"); } catch {}
+    console.error("member-chat error:", err);
+    response.status(500).json({ error: "internal_error" });
+  } finally {
+    client.release();
   }
-
-  response.json({ request: req, state: publicState(await readState()) });
 });
 
 // 红娘服务进度与奖励：奖励服务质量和用户确认的结果，不奖励拖延或隐瞒合适对象
@@ -2512,7 +2636,8 @@ app.patch("/api/matchmaker/requests/:id/service-progress", requireAuth(["matchma
     await client.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(customer), customer.id]);
     await client.query("update match_requests set status = $1, raw = $2, updated_at = now() where id = $3", [req.status, JSON.stringify(req), requestId]);
     await client.query("commit");
-    response.json({ request: req, state: publicState(await readState()) });
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
   } catch (err) {
     try { await client.query("rollback"); } catch {}
     console.error("service-progress error:", err);
@@ -2561,8 +2686,27 @@ app.patch("/api/client/match-requests/:id/outcome", requireAuth(["client"]), asy
       "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
       [req.status, JSON.stringify(req), requestId],
     );
+    // 将成功奖励写入 deals 流水并按 splits 分账
+    if (req.rewardLedger.success > 0) {
+      const settingsRes = await client.query("select data from app_settings where id = 'runtime'");
+      const splits = settingsRes.rows[0]?.data?.splits || { promo: 20, matchmaker: 35, platform: 45 };
+      const dealId = `d${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
+      const deal = {
+        id: dealId,
+        requestId: requestId,
+        amount: req.rewardLedger.success,
+        type: "success_reward",
+        matchmakerId: req.matchmakerId,
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
+      await client.query(
+        "insert into deals (id, request_id, amount, created_at, raw) values ($1, $2, $3, $4, $5::jsonb)",
+        [dealId, requestId, req.rewardLedger.success, deal.createdAt, JSON.stringify({ ...deal, splits })]
+      );
+    }
     await client.query("commit");
-    response.json({ request: req, state: publicState(await readState()) });
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
   } catch (err) {
     try { await client.query("rollback"); } catch {}
     console.error("outcome error:", err);
@@ -2611,7 +2755,8 @@ app.patch("/api/client/match-requests/:id/rating", requireAuth(["client"]), asyn
       await client.query("update matchmakers set raw = $1, updated_at = now() where id = $2", [JSON.stringify(mm), req.matchmakerId]);
     }
     await client.query("commit");
-    response.json({ request: req, state: publicState(await readState()) });
+    invalidateStateCache();
+    response.json({ request: req, state: publicState(await readState(), request.user.role, request.user.sub) });
   } catch (err) {
     try { await client.query("rollback"); } catch {}
     console.error("rating error:", err);
@@ -2643,6 +2788,27 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
     const reqRes = await pool.query("select raw from match_requests where id = $1", [thread.requestId]);
     const req = reqRes.rows[0] ? ensureRequestDefaults(reqRes.rows[0].raw) : null;
     if (!req?.memberChatEnabled) return response.status(403).json({ error: "member_chat_disabled" });
+    // 校验发送方 servicePlan 仍 active，过期后不允许会员直接聊天
+    if (request.user.role === "client") {
+      const senderRes = await pool.query("select raw from users where id = $1", [request.user.sub]);
+      if (senderRes.rows[0]) {
+        const sender = ensureUserDefaults(senderRes.rows[0].raw);
+        const hasActivePlan = (sender.servicePlans || []).some((plan) =>
+          plan.status === "active" && new Date(plan.expiresAt) > new Date()
+        );
+        if (!hasActivePlan) return response.status(403).json({ error: "service_plan_expired", message: "服务套餐已过期，无法继续聊天" });
+      }
+    }
+  }
+  // 所有 thread 类型都校验关联 request 是否已终态，阻止在已完成/已拒绝的牵线里继续发消息
+  if (thread.requestId) {
+    const terminalReqRes = await pool.query("select raw from match_requests where id = $1", [thread.requestId]);
+    if (terminalReqRes.rows[0]) {
+      const terminalReq = ensureRequestDefaults(terminalReqRes.rows[0].raw);
+      if (["已完成", "已拒绝"].includes(terminalReq.status)) {
+        return response.status(403).json({ error: "request_terminated", message: "该牵线已结束，无法继续发送消息" });
+      }
+    }
   }
 
   // 检查发送者是否被拉黑
@@ -2877,13 +3043,15 @@ app.post("/api/admin/agencies", requireAuth(["admin"]), async (request, response
     "insert into agencies (id, name, city, raw) values ($1, $2, $3, $4::jsonb)",
     [agencyId, agency.name, agency.city, JSON.stringify(agency)]
   );
-  response.status(201).json({ agency, state: publicState(await readState()) });
+  response.status(201).json({ agency, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 7. 管理员：添加红娘
 app.post("/api/admin/matchmakers", requireAuth(["admin"]), async (request, response) => {
-  const { name, agencyId, code } = request.body || {};
+  const { name, agencyId, code, password } = request.body || {};
   if (!name || !agencyId || !code) return response.status(400).json({ error: "missing_fields" });
+  const trimmedPassword = String(password || "").trim();
+  if (trimmedPassword.length < 6) return response.status(400).json({ error: "password_too_short", message: "红娘初始密码至少 6 位" });
 
   const codeUpper = code.trim().toUpperCase();
   const codeCheck = await pool.query("select 1 from matchmakers where upper(code) = $1", [codeUpper]);
@@ -2896,6 +3064,7 @@ app.post("/api/admin/matchmakers", requireAuth(["admin"]), async (request, respo
     agencyId,
     code: codeUpper,
     status: "active",
+    passwordHash: hashPassword(trimmedPassword),
     registeredAt: new Date().toISOString()
   };
   
@@ -2904,7 +3073,7 @@ app.post("/api/admin/matchmakers", requireAuth(["admin"]), async (request, respo
      values ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
     [mmId, agencyId, matchmaker.name, codeUpper, matchmaker.status, matchmaker.registeredAt, JSON.stringify(matchmaker)]
   );
-  response.status(201).json({ matchmaker, state: publicState(await readState()) });
+  response.status(201).json({ matchmaker, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 8. 管理员：修改分成比例
@@ -2926,7 +3095,7 @@ app.patch("/api/admin/splits", requireAuth(["admin"]), async (request, response)
     "insert into app_settings (id, data, updated_at) values ('runtime', $1::jsonb, now()) on conflict (id) do update set data = excluded.data, updated_at = now()",
     [JSON.stringify(settings)]
   );
-  response.json({ splits: settings.splits, state: publicState(await readState()) });
+  response.json({ splits: settings.splits, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 9. 管理员：随机生成卡密
@@ -2951,7 +3120,7 @@ app.post("/api/admin/promo-codes", requireAuth(["admin"]), async (request, respo
     "insert into promo_codes (code, matchmaker_id, used, used_by, infinite, raw) values ($1, $2, $3, $4, $5, $6::jsonb)",
     [promoCode.code, promoCode.matchmakerId, false, null, false, JSON.stringify(promoCode)]
   );
-  response.status(201).json({ promoCode, state: publicState(await readState()) });
+  response.status(201).json({ promoCode, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 10. 管理员：模拟一笔成交记录
@@ -2968,7 +3137,7 @@ app.post("/api/admin/deals/simulate", requireAuth(["admin"]), async (request, re
     "insert into deals (id, request_id, amount, created_at, raw) values ($1, $2, $3, $4, $5::jsonb)",
     [dealId, null, 399, deal.createdAt, JSON.stringify(deal)]
   );
-  response.status(201).json({ deal, state: publicState(await readState()) });
+  response.status(201).json({ deal, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // ==========================================
@@ -3440,6 +3609,17 @@ server.on("upgrade", (request, socket, head) => {
       ws.auth = payload;
       registerRealtimeClient(ws, payload);
       sendRealtime(ws, { type: "socket_ready" });
+      // 应用层 ping/pong：兼容前端心跳
+      ws.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "ping") {
+            sendRealtime(ws, { type: "pong" });
+          }
+        } catch {
+          // ignore invalid messages
+        }
+      });
       ws.on("close", () => {
         unregisterRealtimeClient(ws, payload);
       });

@@ -6,6 +6,14 @@ let socket = null;
 let reconnectTimer = null;
 let shouldReconnect = false;
 let currentToken = "";
+let reconnectAttempts = 0;
+let pingInterval = null;
+let pongTimeout = null;
+
+const PING_INTERVAL_MS = 30000;
+const PONG_TIMEOUT_MS = 60000;
+const MAX_RECONNECT_DELAY_MS = 30000;
+const BASE_RECONNECT_DELAY_MS = 1000;
 
 function emit(event) {
   listeners.forEach((listener) => {
@@ -32,7 +40,38 @@ function clearReconnectTimer() {
   }
 }
 
+function clearHeartbeat() {
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  if (pongTimeout) {
+    clearTimeout(pongTimeout);
+    pongTimeout = null;
+  }
+}
+
+function startHeartbeat() {
+  clearHeartbeat();
+  pingInterval = setInterval(() => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "ping" }));
+      // 设置 pong 超时，如果 60s 内没收到 pong 则强制关闭连接
+      if (pongTimeout) clearTimeout(pongTimeout);
+      pongTimeout = setTimeout(() => {
+        // pong 超时，强制关闭连接，触发 onclose → reconnect
+        try {
+          socket.close();
+        } catch (error) {
+          // ignore close errors
+        }
+      }, PONG_TIMEOUT_MS);
+    }
+  }, PING_INTERVAL_MS);
+}
+
 function resetSocket() {
+  clearHeartbeat();
   if (socket) {
     socket.onopen = null;
     socket.onclose = null;
@@ -61,12 +100,23 @@ function getSocketUrl(token) {
   return "";
 }
 
+function getReconnectDelay() {
+  // 指数退避：1s, 2s, 4s, 8s, 16s, max 30s
+  const delay = Math.min(
+    BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts),
+    MAX_RECONNECT_DELAY_MS
+  );
+  return delay;
+}
+
 function scheduleReconnect() {
   if (!shouldReconnect || reconnectTimer) return;
+  const delay = getReconnectDelay();
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
+    reconnectAttempts++;
     ensureChatSocket();
-  }, 1000);
+  }, delay);
 }
 
 export function ensureChatSocket() {
@@ -91,12 +141,19 @@ export function ensureChatSocket() {
   socket = new WebSocket(url);
 
   socket.onopen = () => {
+    reconnectAttempts = 0;
+    startHeartbeat();
     emit({ type: "socket_open" });
   };
 
   socket.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
+      // 收到 pong 时重置超时计时器
+      if (payload.type === "pong" && pongTimeout) {
+        clearTimeout(pongTimeout);
+        pongTimeout = null;
+      }
       emit(payload);
     } catch (error) {
       // ignore invalid payloads
@@ -119,6 +176,7 @@ export function ensureChatSocket() {
 export function closeChatSocket() {
   shouldReconnect = false;
   currentToken = "";
+  reconnectAttempts = 0;
   clearReconnectTimer();
   resetSocket();
 }

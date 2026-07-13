@@ -32,6 +32,13 @@ function getBaseUrl() {
 
 const BASE_URL = getBaseUrl();
 
+// 401 节流：并发请求同时返回 401 时只处理一次
+let isHandling401 = false;
+
+// fail toast 节流：网络异常时 1 秒内只 toast 一次
+let lastFailToastTime = 0;
+const FAIL_TOAST_INTERVAL_MS = 1000;
+
 function getFriendlyErrorMessage(value, fallback) {
   const messages = {
     invalid_credentials: "账号或密码错误",
@@ -74,6 +81,7 @@ export function request(options = {}) {
       method,
       data,
       header,
+      timeout: 15000,
       success: (res) => {
         const { statusCode, data: resData } = res;
 
@@ -91,7 +99,12 @@ export function request(options = {}) {
             return;
           }
 
-          // Token 失效，清除登录态并按角色跳转登录页
+          // Token 失效，清除登录态并按角色跳转登录页（节流：并发 401 只处理一次）
+          if (isHandling401) {
+            reject(new Error(msg));
+            return;
+          }
+          isHandling401 = true;
           let loginUrl = "/pages/login/index";
           try {
             const session = readSession(getCurrentRole());
@@ -100,6 +113,7 @@ export function request(options = {}) {
             removeSession(getCurrentRole());
           } catch (e) {}
           redirectToPath(loginUrl);
+          setTimeout(() => { isHandling401 = false; }, 2000);
           reject(new Error(msg));
           return;
         }
@@ -140,7 +154,11 @@ export function request(options = {}) {
         }
       },
       fail: (err) => {
-        uni.showToast({ title: "网络连接失败", icon: "none" });
+        const now = Date.now();
+        if (now - lastFailToastTime > FAIL_TOAST_INTERVAL_MS) {
+          lastFailToastTime = now;
+          uni.showToast({ title: "网络连接失败", icon: "none" });
+        }
         reject(new Error(err.errMsg || "网络错误"));
       },
     });
