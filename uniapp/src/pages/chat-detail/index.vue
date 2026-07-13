@@ -28,10 +28,11 @@
       />
       <button
         class="btn-send"
-        :class="{ disabled: !canSend }"
+        :class="{ disabled: !canSend || sending }"
+        :disabled="sending"
         @mousedown.prevent
         @click="handleSend"
-      >发送</button>
+      >{{ sending ? '...' : '发送' }}</button>
     </view>
     <button v-if="newMessageCount > 0" class="new-message-button" @click="jumpToLatest">
       {{ newMessageCount > 99 ? '99+' : newMessageCount }} 条新消息
@@ -330,7 +331,8 @@ const nextClientSeq = () => {
 
 const handleSend = async () => {
   const content = inputText.value.trim();
-  if (!content) return;
+  if (!content || sending.value) return;
+  sending.value = true;
   pendingSendCount.value += 1;
 
   const clientMsgNo = generateClientMsgNo();
@@ -375,6 +377,7 @@ const handleSend = async () => {
     uni.showToast({ title: '发送失败', icon: 'none' });
   } finally {
     pendingSendCount.value = Math.max(0, pendingSendCount.value - 1);
+    sending.value = false;
   }
 };
 </script>

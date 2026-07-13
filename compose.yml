@@ -28,7 +28,7 @@ services:
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-matchmaker}
       PGUSER: ${POSTGRES_USER:-matchmaker}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}

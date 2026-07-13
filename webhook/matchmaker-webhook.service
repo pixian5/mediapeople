@@ -10,9 +10,9 @@ ExecStart=/usr/bin/python3 /opt/matchmaker/webhook/webhook_server.py
 Restart=always
 RestartSec=5
 Environment=WEBHOOK_PORT=9000
-Environment=WEBHOOK_SECRET=matchmaker-webhook-2026
 Environment=DEPLOY_SCRIPT=/opt/matchmaker/deploy/auto-deploy.sh
-Environment=BARK_KEY=RSyM7zPTvBfhNwf4RmMxic
+# 安全：从 /opt/matchmaker/.env 读取 WEBHOOK_SECRET 和 BARK_KEY，避免在仓库中硬编码
+EnvironmentFile=/opt/matchmaker/.env
 Environment=PATH=/root/.nvm/versions/node/v24.15.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 StandardOutput=journal
 StandardError=journal

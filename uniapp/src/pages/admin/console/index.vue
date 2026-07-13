@@ -4,7 +4,7 @@
     <view class="toolbar">
       <text class="toolbar-title">管理平台</text>
       <view class="toolbar-actions">
-        <button class="btn-simulate" @click="simulateDeal">模拟成交</button>
+        <button class="btn-simulate" :disabled="actionLoading" @click="simulateDeal">模拟成交</button>
         <button class="btn-logout" @click="handleLogout">退出</button>
       </view>
     </view>
@@ -62,7 +62,7 @@
         <input class="form-input" v-model.number="splitForm.platform" type="number" placeholder="0-100" />
       </view>
       <view class="split-total" :class="{ error: splitTotal !== 100 }">当前合计：{{ splitTotal }}%</view>
-      <button class="btn-primary" @click="saveSplits">保存分成比例</button>
+      <button class="btn-primary" :disabled="actionLoading" @click="saveSplits">保存分成比例</button>
       <view class="split-preview">
         <view v-for="row in splitPreview" :key="row.label" class="split-row">
           <text>{{ row.label }}</text>
@@ -83,7 +83,7 @@
         <text class="form-label">城市</text>
         <input class="form-input" v-model="agencyForm.city" placeholder="请输入城市" />
       </view>
-      <button class="btn-primary" @click="addAgency">添加机构</button>
+      <button class="btn-primary" :disabled="actionLoading" @click="addAgency">添加机构</button>
       <view class="section-title" style="margin-top: 32rpx;">机构列表（{{ appStore.agencies.length }} 家）</view>
       <view v-if="appStore.agencies.length === 0" class="empty-tip">暂无机构</view>
       <view v-for="agency in appStore.agencies" :key="agency.id" class="plain-item">
@@ -109,7 +109,7 @@
         <text class="form-label">推荐码</text>
         <input class="form-input" v-model="matchmakerForm.code" placeholder="如 HM-LILI" />
       </view>
-      <button class="btn-primary" @click="addMatchmaker">添加红娘</button>
+      <button class="btn-primary" :disabled="actionLoading" @click="addMatchmaker">添加红娘</button>
       <view class="section-title" style="margin-top: 32rpx;">红娘列表（{{ appStore.matchmakers.length }} 位）</view>
       <view v-if="appStore.matchmakers.length === 0" class="empty-tip">暂无红娘</view>
       <view v-for="mm in appStore.matchmakers" :key="mm.id" class="plain-item">
@@ -129,16 +129,16 @@
         </view>
         <text class="customer-line">城市：{{ user.city || '-' }}</text>
         <text class="customer-line">红娘：{{ getMatchmakerName(user.matchmakerIds?.[0]) || '-' }}</text>
-        <text class="customer-line">微信：{{ user.wechat || '-' }}</text>
-        <text class="customer-line">联系方式：{{ user.phone || '-' }} / {{ user.email || '-' }}</text>
-        <text class="customer-line">实名：{{ user.realNameVerified ? `已实名 (${user.realName})` : '未实名' }}</text>
+        <text class="customer-line">微信：{{ maskWechat(user.wechat) }}</text>
+        <text class="customer-line">联系方式：{{ maskPhone(user.phone) }} / {{ maskEmail(user.email) }}</text>
+        <text class="customer-line">实名：{{ user.realNameVerified ? `已实名 (${maskRealName(user.realName)})` : '未实名' }}</text>
       </view>
     </view>
 
     <!-- 兑换码 -->
     <view v-if="currentSection === 'promoCodes'" class="panel">
       <view class="section-title">兑换码管理</view>
-      <button class="btn-primary" @click="generatePromoCode">随机生成兑换码</button>
+      <button class="btn-primary" :disabled="actionLoading" @click="generatePromoCode">随机生成兑换码</button>
       <view v-if="appStore.promoCodes.length === 0" class="empty-tip">暂无兑换码</view>
       <view v-for="code in appStore.promoCodes" :key="code.code" class="plain-item">
         <text class="item-title">{{ code.code }}</text>
@@ -243,24 +243,50 @@ const agencyOptions = computed(() => appStore.agencies.map((a) => `${a.name}（$
 const getAgencyName = (id) => appStore.getAgencyById(id)?.name;
 const getMatchmakerName = (id) => appStore.getMatchmakerById(id)?.name;
 
+// PII 脱敏：管理后台展示客户敏感信息时部分隐藏，避免一次性拖走全量 PII
+const maskPhone = (phone) => {
+  if (!phone || phone.length < 7) return phone || '-';
+  return phone.slice(0, 3) + '****' + phone.slice(-4);
+};
+const maskEmail = (email) => {
+  if (!email) return '-';
+  const at = email.indexOf('@');
+  if (at <= 1) return email;
+  return email.slice(0, 1) + '***' + email.slice(at);
+};
+const maskWechat = (w) => (!w ? '-' : w.slice(0, 2) + '***');
+const maskRealName = (name) => {
+  if (!name) return '-';
+  if (name.length <= 1) return name;
+  return name.slice(0, 1) + '*'.repeat(Math.min(name.length - 1, 2));
+};
+
 const handleMatchmakerAgencyChange = (e) => {
   matchmakerAgencyIndex.value = e.detail.value;
   matchmakerForm.agencyId = appStore.agencies[matchmakerAgencyIndex.value]?.id || '';
 };
 
+const actionLoading = ref(false);
+
 const simulateDeal = async () => {
+  if (actionLoading.value) return;
+  actionLoading.value = true;
   try {
     await simulateDealApi();
     await appStore.fetchState();
     uni.showToast({ title: '已模拟新增一笔成交', icon: 'none' });
-  } catch (error) {}
+  } catch (error) {} finally {
+    actionLoading.value = false;
+  }
 };
 
 const saveSplits = async () => {
+  if (actionLoading.value) return;
   if (splitTotal.value !== 100) {
     uni.showToast({ title: `当前合计为 ${splitTotal.value}%，请调整为 100%`, icon: 'none' });
     return;
   }
+  actionLoading.value = true;
   try {
     await saveSplitsApi({
       promo: Number(splitForm.promo),
@@ -269,31 +295,39 @@ const saveSplits = async () => {
     });
     await appStore.fetchState();
     uni.showToast({ title: '分成比例已保存', icon: 'success' });
-  } catch (error) {}
+  } catch (error) {} finally {
+    actionLoading.value = false;
+  }
 };
 
 const addAgency = async () => {
+  if (actionLoading.value) return;
   const { name, city } = agencyForm;
   if (!name || !city) {
     uni.showToast({ title: '请填写机构名称和城市', icon: 'none' });
     return;
   }
+  actionLoading.value = true;
   try {
     await addAgencyApi({ name, city });
     agencyForm.name = '';
     agencyForm.city = '';
     await appStore.fetchState();
     uni.showToast({ title: '机构已添加', icon: 'success' });
-  } catch (error) {}
+  } catch (error) {} finally {
+    actionLoading.value = false;
+  }
 };
 
 const addMatchmaker = async () => {
+  if (actionLoading.value) return;
   const { name, code } = matchmakerForm;
   if (!name || !code) {
     uni.showToast({ title: '请填写姓名和推荐码', icon: 'none' });
     return;
   }
   const agency = appStore.agencies[matchmakerAgencyIndex.value];
+  actionLoading.value = true;
   try {
     await addMatchmakerApi({
       name,
@@ -304,10 +338,14 @@ const addMatchmaker = async () => {
     matchmakerForm.code = '';
     await appStore.fetchState();
     uni.showToast({ title: '红娘已添加', icon: 'success' });
-  } catch (error) {}
+  } catch (error) {} finally {
+    actionLoading.value = false;
+  }
 };
 
 const generatePromoCode = async () => {
+  if (actionLoading.value) return;
+  actionLoading.value = true;
   try {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let randomCode = '';
@@ -321,7 +359,9 @@ const generatePromoCode = async () => {
     await generatePromoCodeApi({ code: randomCode, matchmakerId });
     await appStore.fetchState();
     uni.showToast({ title: `已生成兑换码：${randomCode}`, icon: 'none' });
-  } catch (error) {}
+  } catch (error) {} finally {
+    actionLoading.value = false;
+  }
 };
 
 const handleLogout = () => {

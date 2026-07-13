@@ -7,7 +7,7 @@ const PORT = Number(process.env.WEBHOOK_PORT || 9000);
 const SECRET = process.env.WEBHOOK_SECRET || "";
 const DEPLOY_SCRIPT = process.env.DEPLOY_SCRIPT || "/opt/matchmaker/deploy/auto-deploy.sh";
 const LOG_FILE = "/var/log/matchmaker-webhook.log";
-const BARK_KEY = process.env.BARK_KEY || "RSyM7zPTvBfhNwf4RmMxic";
+const BARK_KEY = process.env.BARK_KEY || "";
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -16,6 +16,7 @@ function log(msg) {
 }
 
 function barkNotify(title, body) {
+  if (!BARK_KEY) return; // 未配置 BARK_KEY 时跳过通知
   const data = JSON.stringify({ title, body, group: "matchmaker-deploy" });
   const req = http.request(`https://api.day.app/${BARK_KEY}`, {
     method: "POST",
@@ -28,7 +29,11 @@ function barkNotify(title, body) {
 }
 
 function verifySignature(body, signature) {
-  if (!SECRET) return true; // 未配置 secret 时跳过验证
+  // 安全：未配置 SECRET 时拒绝所有请求，避免未授权部署
+  if (!SECRET) {
+    log("WEBHOOK_SECRET 未配置，拒绝请求");
+    return false;
+  }
   const expected = "sha256=" + crypto.createHmac("sha256", SECRET).update(body).digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));

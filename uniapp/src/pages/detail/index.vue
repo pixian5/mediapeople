@@ -115,6 +115,14 @@ const buildPreviewProfile = (options) => {
 };
 
 onLoad((options) => {
+  // 鉴权：未登录用户不能查看用户详情，避免资料泄露
+  if (!userStore.isLoggedIn) {
+    uni.showToast({ title: '请先登录', icon: 'none' });
+    setTimeout(() => {
+      uni.redirectTo({ url: '/pages/login/index' });
+    }, 1000);
+    return;
+  }
   const preview = buildPreviewProfile(options);
   if (preview) {
     profile.value = preview;

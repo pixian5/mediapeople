@@ -425,6 +425,8 @@ const pool = new Pool(
 );
 
 const app = express();
+// trust proxy：通过 nginx 反向代理时正确解析客户端真实 IP
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "2mb" }));
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -1856,6 +1858,14 @@ app.put("/api/state", requireAuth(["admin"]), async (request, response) => {
 });
 
 app.post("/api/reset", requireAuth(["admin"]), async (request, response) => {
+  // 生产环境禁止重置数据库，防止误操作导致全量数据丢失
+  if (process.env.NODE_ENV === "production") {
+    return response.status(403).json({ error: "reset_disabled_in_production", message: "生产环境禁止重置数据库" });
+  }
+  // 非生产环境需二次确认
+  if (request.body?.confirm !== "RESET") {
+    return response.status(400).json({ error: "confirm_required", message: "请在请求体中传入 confirm: 'RESET' 以确认重置" });
+  }
   await writeState(seedState);
   response.json(publicState(await readState(), request.user.role, request.user.sub));
 });
@@ -3009,13 +3019,16 @@ app.post("/api/client/blocks", requireAuth(["client", "matchmaker"]), async (req
   const { blockedId, reason } = request.body || {};
   if (!blockedId) return response.status(400).json({ error: "blocked_id_required" });
   if (blockedId === blockerId) return response.status(400).json({ error: "cannot_block_self" });
+  // 校验目标用户是否存在，避免孤儿数据
+  const targetRes = await pool.query("select id from users where id = $1", [blockedId]);
+  if (targetRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
 
   const blockId = `blk${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
   const block = {
     id: blockId,
     blockerId,
     blockedId,
-    reason: reason || null,
+    reason: reason ? String(reason).slice(0, 500) : null,
     createdAt: new Date().toISOString(),
   };
 
@@ -3041,6 +3054,9 @@ app.post("/api/client/reports", requireAuth(["client", "matchmaker"]), async (re
   const { reportedId, reason, detail } = request.body || {};
   if (!reportedId || !reason) return response.status(400).json({ error: "reported_id_and_reason_required" });
   if (reportedId === reporterId) return response.status(400).json({ error: "cannot_report_self" });
+  // 校验目标用户是否存在，避免孤儿数据
+  const targetRes = await pool.query("select id from users where id = $1", [reportedId]);
+  if (targetRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
 
   const validReasons = ["fraud", "harassment", "fake_profile", "spam", "inappropriate_content", "other"];
   if (!validReasons.includes(reason)) {
@@ -3053,7 +3069,7 @@ app.post("/api/client/reports", requireAuth(["client", "matchmaker"]), async (re
     reporterId,
     reportedId,
     reason,
-    detail: detail || null,
+    detail: detail ? String(detail).slice(0, 1000) : null,
     status: "pending",
     createdAt: new Date().toISOString(),
   };
@@ -3153,7 +3169,7 @@ app.patch("/api/admin/splits", requireAuth(["admin"]), async (request, response)
   if (values.some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
     return response.status(400).json({ error: "split_out_of_range", message: "分成比例必须在 0 到 100 之间" });
   }
-  if (values[0] + values[1] + values[2] !== 100) {
+  if (Math.abs(values[0] + values[1] + values[2] - 100) > 0.01) {
     return response.status(400).json({ error: "sum_must_be_100" });
   }
 
@@ -3471,37 +3487,41 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
   }
 });
 
-// 14. 获取我的牵线记录
+// 14. 获取我的牵线记录（包含发起和接收的）
 app.get("/api/client/match-requests", requireAuth(["client"]), async (request, response) => {
   try {
     const userId = request.user.sub;
 
-    // 查询当前用户发起的牵线请求，JOIN users 表获取对方基本信息
+    // 查询当前用户发起或接收的牵线请求，JOIN users 表获取对方基本信息
     const res = await pool.query(
       `SELECT
          mr.raw AS request_raw,
-         tu.id AS to_user_id,
-         tu.name AS to_user_name,
-         tu.gender AS to_user_gender,
-         tu.age AS to_user_age,
-         tu.city AS to_user_city,
-         tu.raw->>'photo' AS to_user_photo
+         mr.from_user_id,
+         mr.to_user_id,
+         CASE WHEN mr.from_user_id = $1 THEN mr.to_user_id ELSE mr.from_user_id END AS other_user_id,
+         ou.id AS other_user_id_val,
+         ou.name AS other_user_name,
+         ou.gender AS other_user_gender,
+         ou.age AS other_user_age,
+         ou.city AS other_user_city,
+         ou.raw->>'photo' AS other_user_photo
        FROM match_requests mr
-       LEFT JOIN users tu ON tu.id = mr.to_user_id
-       WHERE mr.from_user_id = $1
+       LEFT JOIN users ou ON ou.id = CASE WHEN mr.from_user_id = $1 THEN mr.to_user_id ELSE mr.from_user_id END
+       WHERE mr.from_user_id = $1 OR mr.to_user_id = $1
        ORDER BY mr.created_at DESC`,
       [userId],
     );
 
     const list = res.rows.map((row) => ({
       ...row.request_raw,
+      direction: row.from_user_id === userId ? "outgoing" : "incoming",
       toUser: {
-        id: row.to_user_id,
-        name: row.to_user_name,
-        gender: row.to_user_gender,
-        age: row.to_user_age,
-        city: row.to_user_city,
-        photo: row.to_user_photo,
+        id: row.other_user_id_val,
+        name: row.other_user_name,
+        gender: row.other_user_gender,
+        age: row.other_user_age,
+        city: row.other_user_city,
+        photo: row.other_user_photo,
       },
     }));
 

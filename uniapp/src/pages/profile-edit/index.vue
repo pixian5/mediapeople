@@ -105,6 +105,26 @@ const handleSave = async () => {
     uni.showToast({ title: '昵称不能为空', icon: 'none' });
     return;
   }
+  if (form.name.length > 30) {
+    uni.showToast({ title: '昵称不能超过30字', icon: 'none' });
+    return;
+  }
+  if (form.age && (Number(form.age) < 18 || Number(form.age) > 99)) {
+    uni.showToast({ title: '年龄需在18-99之间', icon: 'none' });
+    return;
+  }
+  if (form.wechat && !/^[a-zA-Z0-9_]{6,20}$/.test(form.wechat)) {
+    uni.showToast({ title: '微信号格式不正确（6-20位字母数字下划线）', icon: 'none' });
+    return;
+  }
+  if (form.bio && form.bio.length > 500) {
+    uni.showToast({ title: '个人简介不能超过500字', icon: 'none' });
+    return;
+  }
+  if (form.requirements && form.requirements.length > 500) {
+    uni.showToast({ title: '择偶要求不能超过500字', icon: 'none' });
+    return;
+  }
   loading.value = true;
   try {
     await updateProfileApi(form);

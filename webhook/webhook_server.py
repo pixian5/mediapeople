@@ -26,7 +26,7 @@ PORT = int(os.environ.get("WEBHOOK_PORT", 9000))
 SECRET = os.environ.get("WEBHOOK_SECRET", "").encode()
 DEPLOY_SCRIPT = os.environ.get("DEPLOY_SCRIPT", "/opt/matchmaker/deploy/auto-deploy.sh")
 LOG_FILE = "/var/log/matchmaker-webhook.log"
-BARK_KEY = os.environ.get("BARK_KEY", "RSyM7zPTvBfhNwf4RmMxic")
+BARK_KEY = os.environ.get("BARK_KEY", "")
 
 # 配置日志同时输出到文件和标准输出
 logging.basicConfig(
@@ -45,6 +45,8 @@ deploying = threading.Lock()
 
 def bark_notify(title: str, body: str):
     """发送 Bark 推送通知（不抛异常，失败静默）"""
+    if not BARK_KEY:
+        return  # 未配置 BARK_KEY 时跳过通知
     try:
         data = json.dumps({
             "title": title,
@@ -62,8 +64,10 @@ def bark_notify(title: str, body: str):
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
+    # 安全：未配置 SECRET 时拒绝所有请求，避免未授权部署
     if not SECRET:
-        return True  # 未配置 secret 时跳过验证
+        logger.warning("WEBHOOK_SECRET 未配置，拒绝请求")
+        return False
     expected = "sha256=" + hmac.new(SECRET, body, hashlib.sha256).hexdigest()
     try:
         return hmac.compare_digest(expected.encode(), signature.encode())
