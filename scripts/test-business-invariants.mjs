@@ -12,7 +12,7 @@ assert.match(
 );
 assert.match(
   server,
-  /function renewServicePlan[\s\S]*subscriptionId: currentPlan\.subscriptionId[\s\S]*weeklyMatchUsed: Number\(currentPlan\.weeklyMatchUsed/,
+  /function renewServicePlan[\s\S]*subscriptionId: currentPlan\.subscriptionId[\s\S]*weeklyMatchUsed: isSameWeek \? Number\(currentPlan\.weeklyMatchUsed/,
   "renewal must retain subscription identity and usage counters",
 );
 

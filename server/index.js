@@ -751,7 +751,7 @@ function publicState(data, viewerRole = "admin", viewerId = null) {
   // 非 admin: 只返回与 viewer 相关的数据子集
   const viewerMatchmakerIds = new Set(
     (data.matchmakers || [])
-      .filter((mm) => mm.id === viewerId || (mm.boundUserIds || []).includes(viewerId))
+      .filter((mm) => mm.id === viewerId)
       .map((mm) => mm.id),
   );
   // 收集 viewer 参与的所有 request id
@@ -762,11 +762,14 @@ function publicState(data, viewerRole = "admin", viewerId = null) {
     }
   }
   // 收集 viewer 可访问的 thread id
+  // 红娘只能看到自己参与的会话（participants 包含自己，或 thread.requestId 属于自己的 request）
   const relatedThreadIds = new Set();
   for (const thread of data.chatThreads || []) {
     const participants = Array.isArray(thread.participants) ? thread.participants : [];
     const participantIds = participants.map((p) => (typeof p === "object" ? p.id : p)).filter(Boolean);
-    if (participantIds.includes(viewerId) || viewerMatchmakerIds.size > 0) {
+    if (participantIds.includes(viewerId)) {
+      relatedThreadIds.add(thread.id);
+    } else if (thread.requestId && relatedRequestIds.has(thread.requestId)) {
       relatedThreadIds.add(thread.id);
     }
   }
@@ -846,6 +849,13 @@ function applyPublishedProfile(user, matchmakerId = null) {
   matchmakerId ||= user.matchmakerIds?.[0] || null;
   const published = matchmakerId ? user.profileByMatchmaker?.[matchmakerId]?.published : null;
   return published ? { ...user, ...published } : { ...user };
+}
+
+// 脱敏自身用户对象：返回给用户本人的数据中不应包含 passwordHash 和完整 idCard
+function sanitizeUserSelf(user) {
+  if (!user || typeof user !== "object") return user;
+  const { passwordHash, idCard, ...rest } = user;
+  return rest;
 }
 
 function upsertUserVipMatchmaker(user, matchmakerId) {
@@ -1666,10 +1676,6 @@ app.post("/api/auth/client/register", async (request, response) => {
     response.status(400).json({ error: "phone_or_email_required", message: "请提供有效的手机号或邮箱" });
     return;
   }
-  if (phone && input.phone && !phone) {
-    response.status(400).json({ error: "phone_invalid", message: "手机号格式不正确" });
-    return;
-  }
   if (input.email && !email) {
     response.status(400).json({ error: "email_invalid", message: "邮箱格式不正确" });
     return;
@@ -1766,20 +1772,38 @@ app.post("/api/auth/client/register", async (request, response) => {
 app.post("/api/auth/matchmaker/register", async (request, response) => {
   const input = request.body || {};
   const phone = normalizePhone(input.phone);
-  const email = normalizeEmail(input.email);
+  let email = normalizeEmail(input.email);
   const code = String(input.code || "").trim().toUpperCase();
   if (!phone || !code) {
     response.status(400).json({ error: "phone_and_code_required" });
     return;
   }
+  // 密码校验（6-64位）
+  const password = String(input.password || "");
+  if (password.length < 6 || password.length > 64) {
+    return response.status(400).json({ error: "password_length_invalid", message: "密码长度需为6-64位" });
+  }
+  // 姓名校验
+  const validatedName = validateName(input.name);
+  if (!validatedName) {
+    return response.status(400).json({ error: "name_invalid", message: "姓名格式不正确（1-30字）" });
+  }
+  // 邮箱校验（如果提供了的话）
+  if (input.email) {
+    const validatedEmail = validateEmail(input.email);
+    if (!validatedEmail) {
+      return response.status(400).json({ error: "email_invalid", message: "邮箱格式不正确" });
+    }
+    email = validatedEmail;
+  }
   const matchmaker = {
     id: `m${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`,
-    name: String(input.name || "").trim(),
+    name: validatedName,
     agencyId: input.agencyId || null,
     code,
     phone,
     email,
-    passwordHash: hashPassword(String(input.password || "")),
+    passwordHash: hashPassword(password),
     status: "active",
     registeredAt: new Date().toISOString(),
   };
@@ -1896,7 +1920,7 @@ app.patch("/api/client/profile", requireAuth(["client"]), async (request, respon
     `update users set name = $1, gender = $2, age = $3, city = $4, job = $5, wechat = $6, raw = $7, updated_at = now() where id = $8`,
     [user.name, user.gender, user.age, user.city, user.job, user.wechat, JSON.stringify(user), userId]
   );
-  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+  response.json({ user: sanitizeUserSelf(user), state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 app.patch("/api/matchmaker/users/:id/profile-review", requireAuth(["matchmaker"]), async (request, response) => {
@@ -1922,7 +1946,12 @@ app.patch("/api/matchmaker/users/:id/profile-review", requireAuth(["matchmaker"]
   user.profileByMatchmaker[matchmakerId] = profile;
 
   await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(user), userId]);
-  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+  // 红娘审核端点：脱敏客户敏感字段（passwordHash、idCard、phone、email、realName、diplomaNo）
+  const { passwordHash: _ph, idCard: _idc, phone: _p, email: _e, realName: _rn, ...safeUser } = user;
+  if (safeUser.education) {
+    safeUser.education = { ...safeUser.education, diplomaNo: undefined };
+  }
+  response.json({ user: safeUser, state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2. 客户：提交实名认证（公安二要素模拟 + 18岁门槛）
@@ -1930,6 +1959,20 @@ app.post("/api/client/real-name", requireAuth(["client"]), async (request, respo
   const userId = request.user.sub;
   const { realName, idCard, phone } = request.body || {};
   if (!realName || !idCard) return response.status(400).json({ error: "name_and_idcard_required" });
+
+  // 真实姓名校验（1-30字）
+  const validatedName = validateName(realName);
+  if (!validatedName) {
+    return response.status(400).json({ error: "name_invalid", message: "姓名格式不正确（1-30字）" });
+  }
+
+  // 手机号校验（如果提供了的话）
+  if (phone) {
+    const validatedPhone = validatePhone(phone);
+    if (!validatedPhone) {
+      return response.status(400).json({ error: "phone_invalid", message: "手机号格式不正确" });
+    }
+  }
 
   // 身份证号格式校验（18位，最后一位可为X）
   const idCardTrimmed = idCard.trim();
@@ -1967,21 +2010,21 @@ app.post("/api/client/real-name", requireAuth(["client"]), async (request, respo
   if (userRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
 
   const user = userRes.rows[0].raw;
-  user.realName = realName.trim();
+  user.realName = validatedName;
   // 身份证号脱敏存储（只保留前6后4，中间用*代替）
   user.idCardMasked = idCardTrimmed.substring(0, 6) + "********" + idCardTrimmed.substring(14);
   user.idCard = idCardTrimmed; // 仍保留完整身份证号（仅服务端内部使用，不返回前端）
   user.realNameVerified = true;
   user.age = age;
   if (phone) {
-    user.phone = phone.trim();
+    user.phone = validatePhone(phone);
   }
 
   await pool.query(
     `update users set phone = $1, age = $2, real_name_verified = true, raw = $3, updated_at = now() where id = $4`,
     [user.phone || null, age, JSON.stringify(user), userId]
   );
-  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+  response.json({ user: sanitizeUserSelf(user), state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.1 客户：提交学历认证（学信网模拟）
@@ -2026,7 +2069,7 @@ app.post("/api/client/education-verify", requireAuth(["client"]), async (request
     [JSON.stringify(user), userId]
   );
   invalidateStateCache();
-  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+  response.json({ user: sanitizeUserSelf(user), state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.2 客户：提交视频认证（活体检测模拟）
@@ -2061,7 +2104,7 @@ app.post("/api/client/video-verify", requireAuth(["client"]), async (request, re
     [JSON.stringify(user), userId]
   );
   invalidateStateCache();
-  response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+  response.json({ user: sanitizeUserSelf(user), state: publicState(await readState(), request.user.role, request.user.sub) });
 });
 
 // 2.3 客户：获取自己的认证状态
@@ -2147,6 +2190,13 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
         await client.query("rollback");
         return response.status(404).json({ error: "invalid_referral_code" });
       }
+      // 防止推荐码重复使用：每用户只能使用一次推荐码路径
+      user.redeemedReferralCodes = Array.isArray(user.redeemedReferralCodes) ? user.redeemedReferralCodes : [];
+      if (user.redeemedReferralCodes.length > 0) {
+        await client.query("rollback");
+        return response.status(409).json({ error: "referral_already_redeemed", message: "您已使用过推荐码领取体验卡" });
+      }
+      user.redeemedReferralCodes.push(referralCode.trim().toUpperCase());
       matchmakerId = mmRes.rows[0].id;
       selectedPlanId = "trial_3d";
     } else {
@@ -2199,9 +2249,9 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
 
     await client.query("commit");
     invalidateStateCache();
-    response.json({ user, state: publicState(await readState(), request.user.role, request.user.sub) });
+    response.json({ user: sanitizeUserSelf(user), state: publicState(await readState(), request.user.role, request.user.sub) });
   } catch (err) {
-    await client.query("rollback");
+    try { await client.query("rollback"); } catch {}
     console.error(err);
     response.status(500).json({ error: "internal_server_error" });
   } finally {
@@ -2616,6 +2666,11 @@ app.patch("/api/matchmaker/requests/:id/service-progress", requireAuth(["matchma
         await client.query("rollback");
         return response.status(409).json({ error: "service_plan_not_found" });
       }
+      // 已确认有效匹配后不能再标记为不合适，防止红娘恶意撤销
+      if (req.matchOutcome === "effective") {
+        await client.query("rollback");
+        return response.status(409).json({ error: "effective_match_already_set", message: "已确认有效匹配，不能再标记为不合适" });
+      }
       // not_fit 作为终态：不再允许原地复活为 effective_match。
       // 如果红娘误判，由客户重新发起牵线（这也是更合理的流程）。
       req.serviceStage = "不合适，等待重新匹配";
@@ -2784,32 +2839,6 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
   const thread = ensureThreadDefaults(threadRes.rows[0].raw);
   if (!canAccessThread(thread, request.user)) return response.status(403).json({ error: "forbidden" });
   if (thread.status !== "active") return response.status(400).json({ error: "thread_inactive" });
-  if (thread.type === "member_member") {
-    const reqRes = await pool.query("select raw from match_requests where id = $1", [thread.requestId]);
-    const req = reqRes.rows[0] ? ensureRequestDefaults(reqRes.rows[0].raw) : null;
-    if (!req?.memberChatEnabled) return response.status(403).json({ error: "member_chat_disabled" });
-    // 校验发送方 servicePlan 仍 active，过期后不允许会员直接聊天
-    if (request.user.role === "client") {
-      const senderRes = await pool.query("select raw from users where id = $1", [request.user.sub]);
-      if (senderRes.rows[0]) {
-        const sender = ensureUserDefaults(senderRes.rows[0].raw);
-        const hasActivePlan = (sender.servicePlans || []).some((plan) =>
-          plan.status === "active" && new Date(plan.expiresAt) > new Date()
-        );
-        if (!hasActivePlan) return response.status(403).json({ error: "service_plan_expired", message: "服务套餐已过期，无法继续聊天" });
-      }
-    }
-  }
-  // 所有 thread 类型都校验关联 request 是否已终态，阻止在已完成/已拒绝的牵线里继续发消息
-  if (thread.requestId) {
-    const terminalReqRes = await pool.query("select raw from match_requests where id = $1", [thread.requestId]);
-    if (terminalReqRes.rows[0]) {
-      const terminalReq = ensureRequestDefaults(terminalReqRes.rows[0].raw);
-      if (["已完成", "已拒绝"].includes(terminalReq.status)) {
-        return response.status(403).json({ error: "request_terminated", message: "该牵线已结束，无法继续发送消息" });
-      }
-    }
-  }
 
   // 检查发送者是否被拉黑
   const peerIds = (thread.participants || [])
@@ -2829,8 +2858,45 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // 先锁住线程行，确保同一线程的消息插入串行化，避免新线程（无消息）时seq重复
+    // 锁住线程行，确保同一线程的消息插入串行化
     await client.query("select id from chat_threads where id = $1 for update", [threadId]);
+
+    // 事务内重新校验 member_chat、servicePlan、request 终态，避免 TOCTOU 竞态
+    if (thread.type === "member_member") {
+      const reqRes = await client.query("select raw from match_requests where id = $1 for update", [thread.requestId]);
+      const req = reqRes.rows[0] ? ensureRequestDefaults(reqRes.rows[0].raw) : null;
+      if (!req?.memberChatEnabled) {
+        await client.query("ROLLBACK");
+        client.release();
+        return response.status(403).json({ error: "member_chat_disabled" });
+      }
+      if (request.user.role === "client") {
+        const senderRes = await client.query("select raw from users where id = $1", [request.user.sub]);
+        if (senderRes.rows[0]) {
+          const sender = ensureUserDefaults(senderRes.rows[0].raw);
+          const hasActivePlan = (sender.servicePlans || []).some((plan) =>
+            plan.status === "active" && new Date(plan.expiresAt) > new Date()
+          );
+          if (!hasActivePlan) {
+            await client.query("ROLLBACK");
+            client.release();
+            return response.status(403).json({ error: "service_plan_expired", message: "服务套餐已过期，无法继续聊天" });
+          }
+        }
+      }
+    }
+    // 所有 thread 类型都校验关联 request 是否已终态
+    if (thread.requestId) {
+      const terminalReqRes = await client.query("select raw from match_requests where id = $1 for update", [thread.requestId]);
+      if (terminalReqRes.rows[0]) {
+        const terminalReq = ensureRequestDefaults(terminalReqRes.rows[0].raw);
+        if (["已完成", "已拒绝"].includes(terminalReq.status)) {
+          await client.query("ROLLBACK");
+          client.release();
+          return response.status(403).json({ error: "request_terminated", message: "该牵线已结束，无法继续发送消息" });
+        }
+      }
+    }
 
     if (clientMsgNo) {
       const existingRes = await client.query(
@@ -2921,16 +2987,20 @@ app.post("/api/chat/threads/:id/messages", requireAuth(["client", "matchmaker"])
     
     await client.query("COMMIT");
     client.release();
-
     invalidateStateCache();
-    broadcastChatMessage(thread, message);
-    response.status(201).json({ message, thread, sensitiveWords: sensitiveFound.length > 0 ? sensitiveFound : undefined });
   } catch (error) {
     try { await client.query("ROLLBACK"); } catch (_) {}
     client.release();
     console.error("发送消息失败:", error);
-    response.status(500).json({ error: "send_failed" });
+    return response.status(500).json({ error: "send_failed" });
   }
+  // 事务已提交：广播和响应放在 try/catch 之外，避免广播异常触发假 500 和双重 release
+  try {
+    broadcastChatMessage(thread, message);
+  } catch (e) {
+    console.error("broadcastChatMessage error:", e);
+  }
+  response.status(201).json({ message, thread, sensitiveWords: sensitiveFound.length > 0 ? sensitiveFound : undefined });
 });
 
 // 反欺诈：拉黑用户
@@ -3274,7 +3344,11 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
     const rankedList = listRes.rows.map((row) => {
       const target = ensureUserDefaults(row.raw);
       const visibleUser = applyPublishedProfile(target);
-      const { passwordHash, idCard, profileByMatchmaker, ...userInfo } = visibleUser;
+      const { passwordHash, idCard, profileByMatchmaker, phone, email, realName, ...userInfo } = visibleUser;
+      // 剥离学历证书编号等敏感字段
+      if (userInfo.education) {
+        userInfo.education = { ...userInfo.education, diplomaNo: undefined };
+      }
       if (!canViewTargetContact(me, target)) {
         delete userInfo.wechat;
       }
@@ -3333,6 +3407,10 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
     const target = ensureUserDefaults(targetRes.rows[0].raw);
     const visibleUser = applyPublishedProfile(target);
     const { passwordHash, idCard, profileByMatchmaker, phone, email, realName, ...userInfo } = visibleUser;
+    // 剥离学历证书编号等敏感字段
+    if (userInfo.education) {
+      userInfo.education = { ...userInfo.education, diplomaNo: undefined };
+    }
     // 非 VIP 用户不返回微信号
     if (!canViewTargetContact(me, target)) {
       delete userInfo.wechat;
