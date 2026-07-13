@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "render:static": "node ./scripts/render-static.mjs",
-    "test": "node ./scripts/test-message-order.mjs && node --check server/index.js && node --check app.js"
+    "test": "node ./scripts/test-message-order.mjs && node ./scripts/test-business-invariants.mjs && node --check server/index.js && node --check app.js"
   },
   "repository": {
     "type": "git",

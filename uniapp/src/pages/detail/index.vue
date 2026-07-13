@@ -97,7 +97,7 @@ const isVipForSelectedMatchmaker = computed(() => {
 const hasMatchRequest = computed(() => !!profile.value?.matchRequest);
 const showGroupChatBtn = computed(() => {
   const mr = profile.value?.matchRequest;
-  return mr?.memberChatEnabled && mr?.groupThreadId;
+  return Boolean(mr?.groupThreadId);
 });
 
 const buildPreviewProfile = (options) => {

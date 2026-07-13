@@ -139,6 +139,7 @@ const confirmStable = async (item) => {
     await confirmMatchOutcomeApi(item.id);
     item.matchOutcome = 'stable_progress';
     item.serviceStage = '双方稳定发展（用户确认）';
+    item.status = '已完成';
     uni.showToast({ title: '已确认，感谢反馈', icon: 'success' });
   } catch (error) {
     // request interceptor handles toast

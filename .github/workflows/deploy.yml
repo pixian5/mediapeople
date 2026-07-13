@@ -4,10 +4,25 @@ on:
   push:
     branches: [master]
 
+concurrency:
+  group: matchmaker-production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm ci
+        working-directory: uniapp
+      - run: npm run build:h5
+        working-directory: uniapp
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -17,5 +32,4 @@ jobs:
           port: 22
           script: |
             cd /opt/matchmaker
-            git pull --ff-only origin master
             bash /opt/matchmaker/deploy/auto-deploy.sh

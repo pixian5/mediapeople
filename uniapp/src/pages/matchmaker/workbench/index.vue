@@ -36,9 +36,9 @@
         </view>
         <view v-if="item.type === 'request'" class="card-extra">
           <view class="chat-toggle">
-            <text>群聊权限：{{ item.memberChatEnabled ? '已开启' : '已关闭' }}</text>
+            <text>男女双方私聊：{{ item.memberChatEnabled ? '已开启' : '已关闭' }}</text>
             <button class="btn-sm btn-ghost" @click="toggleMemberChat(item.id, !item.memberChatEnabled)">
-              {{ item.memberChatEnabled ? '关闭群聊' : '开启群聊' }}
+              {{ item.memberChatEnabled ? '关闭双方私聊' : '开启双方私聊' }}
             </button>
           </view>
           <view class="progress-actions">
@@ -231,7 +231,7 @@ const toggleMemberChat = async (requestId, enabled) => {
   try {
     await toggleMemberChatApi(requestId, enabled);
     await appStore.fetchState();
-    uni.showToast({ title: enabled ? '已开启群聊' : '已关闭群聊', icon: 'none' });
+    uni.showToast({ title: enabled ? '已开启男女双方私聊' : '已关闭男女双方私聊', icon: 'none' });
   } catch (error) {}
 };
 

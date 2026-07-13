@@ -108,11 +108,36 @@ function ensureMatchmakerMetrics(matchmaker) {
 
 function getActiveServicePlan(user, matchmakerId = null) {
   ensureServiceSubscriptions(user);
-  return user.servicePlans.find((plan) =>
+  const candidates = user.servicePlans.filter((plan) =>
     plan.status === "active" &&
     new Date(plan.expiresAt) > new Date() &&
     (!plan.matchmakerId || !matchmakerId || plan.matchmakerId === matchmakerId)
-  ) || null;
+  );
+  candidates.sort((a, b) => {
+    const aHasQuota = (a.totalMatchLimit === null || a.totalMatchUsed < a.totalMatchLimit) &&
+      (a.weeklyMatchLimit === null || a.weeklyMatchUsed < a.weeklyMatchLimit);
+    const bHasQuota = (b.totalMatchLimit === null || b.totalMatchUsed < b.totalMatchLimit) &&
+      (b.weeklyMatchLimit === null || b.weeklyMatchUsed < b.weeklyMatchLimit);
+    if (aHasQuota !== bHasQuota) return aHasQuota ? -1 : 1;
+    return new Date(a.expiresAt) - new Date(b.expiresAt);
+  });
+  return candidates[0] || null;
+}
+
+function renewServicePlan(currentPlan, planId, matchmakerId) {
+  const now = new Date();
+  const currentExpiry = new Date(currentPlan.expiresAt);
+  const extensionStart = currentExpiry > now ? currentExpiry : now;
+  const renewed = createServicePlan(extensionStart, planId, matchmakerId);
+  return {
+    ...renewed,
+    subscriptionId: currentPlan.subscriptionId,
+    startsAt: currentPlan.startsAt || renewed.startsAt,
+    weekKey: currentPlan.weekKey,
+    weeklyMatchUsed: Number(currentPlan.weeklyMatchUsed || 0),
+    weeklyFollowupUsed: Number(currentPlan.weeklyFollowupUsed || 0),
+    totalMatchUsed: Number(currentPlan.totalMatchUsed || 0),
+  };
 }
 
 function getServiceMatchmakerIds(user) {
@@ -621,6 +646,7 @@ function publicState(data) {
 }
 
 function ensureRequestDefaults(request) {
+  const terminalStatus = ["已完成", "已拒绝"].includes(request.status) ? request.status : null;
   if (request.memberChatEnabled === undefined) request.memberChatEnabled = false;
   if (request.maleContacted === undefined) {
     request.maleContacted = request.status === "已联系双方" || request.status === "来和双方对话" || request.status === "已联系男方" || request.status === "联系男方";
@@ -628,7 +654,7 @@ function ensureRequestDefaults(request) {
   if (request.femaleContacted === undefined) {
     request.femaleContacted = request.status === "已联系双方" || request.status === "来和双方对话" || request.status === "已联系女方" || request.status === "联系女方";
   }
-  request.status = getRequestContactStatus(request);
+  request.status = terminalStatus || getRequestContactStatus(request);
   return request;
 }
 
@@ -702,7 +728,7 @@ function getRequestContactStatus(request) {
 }
 
 function isGroupChatAllowed(request) {
-  return Boolean(request?.memberChatEnabled);
+  return Boolean(request?.matchmakerId);
 }
 
 function ensureThreadDefaults(thread) {
@@ -1621,6 +1647,13 @@ app.post("/api/client/real-name", requireAuth(["client"]), async (request, respo
   const birthMonth = parseInt(idCardTrimmed.substring(10, 12), 10);
   const birthDay = parseInt(idCardTrimmed.substring(12, 14), 10);
   const birthDate = new Date(birthYear, birthMonth - 1, birthDay);
+  if (
+    birthDate.getFullYear() !== birthYear ||
+    birthDate.getMonth() !== birthMonth - 1 ||
+    birthDate.getDate() !== birthDay
+  ) {
+    return response.status(400).json({ error: "idcard_birthdate_invalid", message: "身份证出生日期无效" });
+  }
   const now = new Date();
   let age = now.getFullYear() - birthDate.getFullYear();
   const monthDiff = now.getMonth() - birthDate.getMonth();
@@ -1649,8 +1682,8 @@ app.post("/api/client/real-name", requireAuth(["client"]), async (request, respo
   }
 
   await pool.query(
-    `update users set phone = $1, real_name_verified = true, raw = $2, updated_at = now() where id = $3`,
-    [user.phone || null, JSON.stringify(user), userId]
+    `update users set phone = $1, age = $2, real_name_verified = true, raw = $3, updated_at = now() where id = $4`,
+    [user.phone || null, age, JSON.stringify(user), userId]
   );
   response.json({ user, state: publicState(await readState()) });
 });
@@ -1772,7 +1805,10 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
 
     if (code) {
       // 兑换码核销
-      const promoRes = await client.query("select raw from promo_codes where upper(code) = upper($1)", [code.trim()]);
+      const promoRes = await client.query(
+        "select raw from promo_codes where upper(code) = upper($1) for update",
+        [code.trim()],
+      );
       if (promoRes.rows.length === 0) {
         await client.query("rollback");
         return response.status(404).json({ error: "invalid_code" });
@@ -1821,8 +1857,9 @@ app.post("/api/client/vip/redeem", requireAuth(["client"]), async (request, resp
     // 订阅服务订单：短周期可同时购买多位红娘，长周期仅保留一位专属红娘
     user.vip = true;
     const currentPlan = definition.exclusive && activeLongPlan && activeLongPlan.matchmakerId === matchmakerId ? activeLongPlan : null;
-    const currentExpiry = currentPlan ? new Date(currentPlan.expiresAt) : new Date();
-    const newPlan = createServicePlan(currentExpiry, selectedPlanId, matchmakerId);
+    const newPlan = currentPlan
+      ? renewServicePlan(currentPlan, selectedPlanId, matchmakerId)
+      : createServicePlan(new Date(), selectedPlanId, matchmakerId);
     user.servicePlans = currentPlan
       ? user.servicePlans.map((plan) => plan.subscriptionId === currentPlan.subscriptionId ? newPlan : plan)
       : [...user.servicePlans, newPlan];
@@ -1864,108 +1901,122 @@ app.post("/api/client/match-requests", requireAuth(["client"]), async (request, 
   const userId = request.user.sub;
   let { targetUserId, matchmakerId } = request.body || {};
   if (!targetUserId) return response.status(400).json({ error: "target_user_required" });
+  if (targetUserId === userId) return response.status(400).json({ error: "cannot_match_self" });
 
-  const fromUserRes = await pool.query("select raw from users where id = $1", [userId]);
-  if (fromUserRes.rows.length === 0) return response.status(404).json({ error: "user_not_found" });
-  const fromUser = ensureUserDefaults(fromUserRes.rows[0].raw);
-
-  const toUserRes = await pool.query("select raw from users where id = $1", [targetUserId]);
-  if (toUserRes.rows.length === 0) return response.status(404).json({ error: "target_not_found" });
-  const toUser = ensureUserDefaults(toUserRes.rows[0].raw);
-
-  const reqId = `r${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
-  if (!matchmakerId) {
-    matchmakerId = toUser.matchmakerIds?.[0] || fromUser.matchmakerIds?.[0] || null;
-  }
-  if (!matchmakerId) return response.status(400).json({ error: "matchmaker_required" });
-  const activeBoundMatchmakerIds = new Set(getServiceMatchmakerIds(fromUser));
-  if (!activeBoundMatchmakerIds.has(matchmakerId)) return response.status(403).json({ error: "matchmaker_vip_required" });
-  const targetBoundMatchmakerIds = new Set([
-    ...toUser.matchmakerIds,
-  ].filter(Boolean));
-  if (!targetBoundMatchmakerIds.has(matchmakerId)) return response.status(400).json({ error: "target_not_bound_to_matchmaker" });
-
-  const requestedPlan = getActiveServicePlan(fromUser, matchmakerId);
-  if (!requestedPlan) {
-    return response.status(402).json({ error: "service_plan_required", message: "请先购买有效的红娘服务包" });
-  }
-  if (requestedPlan.totalMatchLimit !== null && requestedPlan.totalMatchUsed >= requestedPlan.totalMatchLimit) {
-    return response.status(429).json({ error: "match_quota_exhausted", message: `${requestedPlan.name}的牵线额度已用完` });
-  }
-  if (requestedPlan.weeklyMatchLimit !== null && requestedPlan.weeklyMatchUsed >= requestedPlan.weeklyMatchLimit) {
-    return response.status(429).json({ error: "weekly_match_quota_exhausted", message: `${requestedPlan.name}本周期推荐额度已用完` });
-  }
-
-  const duplicateRes = await pool.query(
-    "select 1 from match_requests where from_user_id = $1 and to_user_id = $2 and matchmaker_id = $3 and status != '已完成'",
-    [userId, targetUserId, matchmakerId]
-  );
-  if (duplicateRes.rows.length > 0) return response.status(409).json({ error: "request_pending" });
-
-  const matchReq = {
-    id: reqId,
-    fromUserId: userId,
-    toUserId: targetUserId,
-    matchmakerId,
-    status: "待红娘联系",
-    maleContacted: false,
-    femaleContacted: false,
-    memberChatEnabled: false,
-    servicePlanId: requestedPlan.subscriptionId,
-    serviceStage: "待首次推荐",
-    followupCount: 0,
-    matchOutcome: null,
-    rewardLedger: {
-      effectiveMatch: 0,
-      followup: 0,
-      success: 0,
-      status: "pending",
-    },
-    createdAt: new Date().toISOString()
-  };
-
-  requestedPlan.weeklyMatchUsed += 1;
-  requestedPlan.totalMatchUsed += 1;
-  await pool.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(fromUser), userId]);
-
-  await pool.query(
-    `insert into match_requests (id, from_user_id, to_user_id, matchmaker_id, status, created_at, raw)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
-    [reqId, userId, targetUserId, matchmakerId, matchReq.status, matchReq.createdAt, JSON.stringify(matchReq)]
-  );
-
-  const mmThreads = buildMemberMatchmakerThreads(matchReq, fromUser, toUser);
-  for (const thread of mmThreads) {
-    await pool.query(
-      `insert into chat_threads (id, type, request_id, status, participants, raw)
-       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-      [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)]
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const usersRes = await client.query(
+      "select id, raw from users where id = any($1::text[]) order by id for update",
+      [[userId, targetUserId]],
     );
-  }
+    const fromRow = usersRes.rows.find((row) => row.id === userId);
+    const toRow = usersRes.rows.find((row) => row.id === targetUserId);
+    if (!fromRow) {
+      await client.query("rollback");
+      return response.status(404).json({ error: "user_not_found" });
+    }
+    if (!toRow) {
+      await client.query("rollback");
+      return response.status(404).json({ error: "target_not_found" });
+    }
+    const fromUser = ensureUserDefaults(fromRow.raw);
+    const toUser = ensureUserDefaults(toRow.raw);
+    matchmakerId ||= toUser.matchmakerIds?.[0] || fromUser.matchmakerIds?.[0] || null;
+    if (!matchmakerId) {
+      await client.query("rollback");
+      return response.status(400).json({ error: "matchmaker_required" });
+    }
+    if (!new Set(getServiceMatchmakerIds(fromUser)).has(matchmakerId)) {
+      await client.query("rollback");
+      return response.status(403).json({ error: "matchmaker_vip_required" });
+    }
+    if (!new Set(toUser.matchmakerIds.filter(Boolean)).has(matchmakerId)) {
+      await client.query("rollback");
+      return response.status(400).json({ error: "target_not_bound_to_matchmaker" });
+    }
 
-  // 申请牵线时即创建三方群线程，符合《业务逻辑审计与防错清单》第六条
-  const groupThread = buildMatchmakerGroupThread(matchReq);
-  await pool.query(
-    `insert into chat_threads (id, type, request_id, status, participants, raw)
-     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
-     on conflict (id) do nothing`,
-    [groupThread.id, groupThread.type, groupThread.requestId, groupThread.status, JSON.stringify(groupThread.participants), JSON.stringify(groupThread)]
-  );
+    const requestedPlan = getActiveServicePlan(fromUser, matchmakerId);
+    if (!requestedPlan) {
+      await client.query("rollback");
+      return response.status(402).json({ error: "service_plan_required", message: "请先购买有效的红娘服务包" });
+    }
+    if (requestedPlan.totalMatchLimit !== null && requestedPlan.totalMatchUsed >= requestedPlan.totalMatchLimit) {
+      await client.query("rollback");
+      return response.status(429).json({ error: "match_quota_exhausted", message: `${requestedPlan.name}的牵线额度已用完` });
+    }
+    if (requestedPlan.weeklyMatchLimit !== null && requestedPlan.weeklyMatchUsed >= requestedPlan.weeklyMatchLimit) {
+      await client.query("rollback");
+      return response.status(429).json({ error: "weekly_match_quota_exhausted", message: `${requestedPlan.name}本周期推荐额度已用完` });
+    }
 
-  const myMatchmakerThread = mmThreads.find((t) =>
-    t.participants.some((p) => p.role === "client" && p.id === userId)
-  );
+    const duplicateRes = await client.query(
+      "select 1 from match_requests where from_user_id = $1 and to_user_id = $2 and matchmaker_id = $3 and status != '已完成'",
+      [userId, targetUserId, matchmakerId],
+    );
+    if (duplicateRes.rows.length > 0) {
+      await client.query("rollback");
+      return response.status(409).json({ error: "request_pending" });
+    }
 
-  response.status(201).json({
-    request: {
-      ...matchReq,
-      matchmakerThreadId: myMatchmakerThread?.id || null,
+    const reqId = `r${Date.now().toString(36)}${crypto.randomBytes(2).toString("hex")}`;
+    const matchReq = {
+      id: reqId,
+      fromUserId: userId,
+      toUserId: targetUserId,
+      matchmakerId,
+      status: "待红娘联系",
+      maleContacted: false,
+      femaleContacted: false,
       memberChatEnabled: false,
-      memberThreadId: null,
-      groupThreadId: groupThread.id,
-    },
-    state: publicState(await readState()),
-  });
+      servicePlanId: requestedPlan.subscriptionId,
+      serviceStage: "待首次推荐",
+      followupCount: 0,
+      matchOutcome: null,
+      rewardLedger: { effectiveMatch: 0, followup: 0, success: 0, status: "pending" },
+      createdAt: new Date().toISOString(),
+    };
+    requestedPlan.weeklyMatchUsed += 1;
+    requestedPlan.totalMatchUsed += 1;
+    await client.query("update users set raw = $1, updated_at = now() where id = $2", [JSON.stringify(fromUser), userId]);
+    await client.query(
+      `insert into match_requests (id, from_user_id, to_user_id, matchmaker_id, status, created_at, raw)
+       values ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+      [reqId, userId, targetUserId, matchmakerId, matchReq.status, matchReq.createdAt, JSON.stringify(matchReq)],
+    );
+
+    const mmThreads = buildMemberMatchmakerThreads(matchReq, fromUser, toUser);
+    const groupThread = buildMatchmakerGroupThread(matchReq);
+    for (const thread of [...mmThreads, groupThread]) {
+      await client.query(
+        `insert into chat_threads (id, type, request_id, status, participants, raw)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+        [thread.id, thread.type, thread.requestId, thread.status, JSON.stringify(thread.participants), JSON.stringify(thread)],
+      );
+    }
+    await client.query("commit");
+    invalidateStateCache();
+
+    const myMatchmakerThread = mmThreads.find((thread) =>
+      thread.participants.some((participant) => participant.role === "client" && participant.id === userId)
+    );
+    response.status(201).json({
+      request: {
+        ...matchReq,
+        matchmakerThreadId: myMatchmakerThread?.id || null,
+        memberChatEnabled: false,
+        memberThreadId: null,
+        groupThreadId: groupThread.id,
+      },
+      state: publicState(await readState()),
+    });
+  } catch (error) {
+    try { await client.query("rollback"); } catch (_) {}
+    console.error("创建牵线请求失败:", error);
+    response.status(500).json({ error: "match_request_create_failed" });
+  } finally {
+    client.release();
+  }
 });
 
 // 5. 红娘：分别标记已联系男方/女方
@@ -2137,6 +2188,7 @@ app.patch("/api/matchmaker/requests/:id/service-progress", requireAuth(["matchma
     req.matchOutcome = "effective";
     req.rewardLedger.effectiveMatch = 0;
   } else if (action === "not_fit") {
+    if (!servicePlan) return response.status(409).json({ error: "service_plan_not_found" });
     req.serviceStage = "不合适，等待重新匹配";
     req.matchOutcome = "not_fit";
     if (!req.matchCreditReturned) {
@@ -2161,16 +2213,20 @@ app.patch("/api/client/match-requests/:id/outcome", requireAuth(["client"]), asy
   const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
   if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
   const req = ensureRequestDefaults(reqRes.rows[0].raw);
-  if (![req.fromUserId, req.toUserId].includes(request.user.sub)) return response.status(403).json({ error: "forbidden" });
+  if (req.fromUserId !== request.user.sub) return response.status(403).json({ error: "forbidden" });
   const customerRes = await pool.query("select raw from users where id = $1", [req.fromUserId]);
   const customer = customerRes.rows[0] ? ensureUserDefaults(customerRes.rows[0].raw) : null;
   const servicePlan = customer?.servicePlans.find((plan) => plan.subscriptionId === req.servicePlanId) || customer?.servicePlan;
   req.rewardLedger ||= { effectiveMatch: 0, followup: 0, success: 0, status: "pending" };
   req.serviceStage = "双方稳定发展（用户确认）";
   req.matchOutcome = outcome;
+  req.status = "已完成";
   req.rewardLedger.success = Number(servicePlan?.successReward || 0);
   req.rewardLedger.status = "eligible";
-  await pool.query("update match_requests set raw = $1, updated_at = now() where id = $2", [JSON.stringify(req), requestId]);
+  await pool.query(
+    "update match_requests set status = $1, raw = $2, updated_at = now() where id = $3",
+    [req.status, JSON.stringify(req), requestId],
+  );
   response.json({ request: req, state: publicState(await readState()) });
 });
 
@@ -2182,7 +2238,8 @@ app.patch("/api/client/match-requests/:id/rating", requireAuth(["client"]), asyn
   const reqRes = await pool.query("select raw from match_requests where id = $1", [requestId]);
   if (reqRes.rows.length === 0) return response.status(404).json({ error: "request_not_found" });
   const req = ensureRequestDefaults(reqRes.rows[0].raw);
-  if (![req.fromUserId, req.toUserId].includes(request.user.sub)) return response.status(403).json({ error: "forbidden" });
+  if (req.fromUserId !== request.user.sub) return response.status(403).json({ error: "forbidden" });
+  if (req.status !== "已完成") return response.status(409).json({ error: "service_not_completed" });
   if (req.customerRating) return response.status(409).json({ error: "rating_already_submitted" });
   req.customerRating = rating;
   req.customerFeedback = String(request.body?.comment || "").trim().slice(0, 500);
@@ -2565,15 +2622,11 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // 查询总数
-    const countRes = await pool.query(`SELECT count(*) FROM users ${whereClause}`, params);
-    const total = parseInt(countRes.rows[0].count);
-
-    // 分页查询用户列表
+    // 先查询完整候选集，计算全局匹配度后再分页，避免只在当前页内部排序。
     const offset = (page - 1) * pageSize;
     const listRes = await pool.query(
-      `SELECT raw FROM users ${whereClause} ORDER BY updated_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      [...params, pageSize, offset],
+      `SELECT raw FROM users ${whereClause}`,
+      params,
     );
 
     const matchmakersRes = await pool.query("select raw from matchmakers");
@@ -2605,8 +2658,8 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
       if (target.videoVerified) {
         score += 7;
       }
-      // VIP 特权曝光（+15）
-      if (target.matchmakerIds && target.matchmakerIds.length > 0) {
+      // 有效 VIP 服务包特权曝光（+15）
+      if (getServiceMatchmakerIds(target).length > 0) {
         score += 15;
       }
       // 择偶要求匹配（+5，如果viewer.age在target.requirements提到的年龄范围内）
@@ -2624,7 +2677,7 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
     }
 
     // 处理返回数据：排除敏感字段，非 VIP 不返回 wechat，并计算匹配度
-    const list = listRes.rows.map((row) => {
+    const rankedList = listRes.rows.map((row) => {
       const target = ensureUserDefaults(row.raw);
       const visibleUser = applyPublishedProfile(target);
       const { passwordHash, idCard, profileByMatchmaker, ...userInfo } = visibleUser;
@@ -2647,7 +2700,9 @@ app.get("/api/client/profiles", requireAuth(["client"]), async (request, respons
     });
 
     // 按匹配度降序排序（VIP 特权曝光）
-    list.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    rankedList.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    const total = rankedList.length;
+    const list = rankedList.slice(offset, offset + pageSize);
 
     response.json({
       code: 0,
@@ -2695,7 +2750,10 @@ app.get("/api/client/profiles/:id", requireAuth(["client"]), async (request, res
       .map(({ passwordHash: _passwordHash, ...matchmaker }) => matchmaker);
 
     const matchRequestRes = await pool.query(
-      "select raw from match_requests where (from_user_id = $1 and to_user_id = $2) or (from_user_id = $2 and to_user_id = $1) order by created_at desc limit 1",
+      `select raw from match_requests
+       where ((from_user_id = $1 and to_user_id = $2) or (from_user_id = $2 and to_user_id = $1))
+         and status != '已完成'
+       order by created_at desc limit 1`,
       [userId, targetId],
     );
     if (matchRequestRes.rows.length > 0) {

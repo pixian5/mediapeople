@@ -388,7 +388,7 @@ function getRequestContactStatus(request) {
 }
 
 function isGroupChatAllowed(request) {
-  return Boolean(request?.memberChatEnabled);
+  return Boolean(request?.matchmakerId);
 }
 
 function ensureThreadDefaults(thread) {
@@ -1819,8 +1819,9 @@ function showProfileDetail(profileId) {
 
   const existingRequest = state.requests.find(
     (r) =>
-      (r.fromUserId === user.id && r.toUserId === profile.id) ||
-      (r.fromUserId === profile.id && r.toUserId === user.id)
+      r.status !== "已完成" &&
+      ((r.fromUserId === user.id && r.toUserId === profile.id) ||
+      (r.fromUserId === profile.id && r.toUserId === user.id))
   );
 
   let actionHtml = "";
@@ -2595,13 +2596,13 @@ function renderMatchmakerDesk() {
             : "";
         const memberChatEnabled = Boolean(request.memberChatEnabled);
         const chatToggleBtn = memberChatEnabled
-          ? `<button class="member-chat-toggle member-chat-toggle-off" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button">关闭群聊</button>`
-          : `<button class="member-chat-toggle member-chat-toggle-on" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button">开启群聊</button>`;
+          ? `<button class="member-chat-toggle member-chat-toggle-off" data-toggle-member-chat="${request.id}" data-chat-enabled="false" type="button">关闭双方私聊</button>`
+          : `<button class="member-chat-toggle member-chat-toggle-on" data-toggle-member-chat="${request.id}" data-chat-enabled="true" type="button">开启双方私聊</button>`;
         const approvedTag = `
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; padding:10px 12px; border-radius:12px; background:${memberChatEnabled ? "rgba(20, 184, 166, 0.10)" : "rgba(148, 163, 184, 0.12)"};">
             <div>
-              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">群聊权限：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
-              <span class="muted">控制男女会员是否能进入群聊入口，不影响红娘私聊。</span>
+              <strong style="display:block; color:${memberChatEnabled ? "var(--teal-dark)" : "var(--muted)"};">男女双方私聊：${memberChatEnabled ? "已开启" : "已关闭"}</strong>
+              <span class="muted">只控制男女会员的一对一互聊，不影响红娘私聊和三方群聊。</span>
             </div>
             ${chatToggleBtn}
           </div>
@@ -2876,7 +2877,7 @@ async function toggleMemberChat(requestId, enabled) {
   }
 
   renderAll();
-  showToast(enabled ? "已开启群聊" : "已关闭群聊");
+  showToast(enabled ? "已开启男女双方私聊" : "已关闭男女双方私聊");
 }
 
 async function updateServiceProgress(requestId, action) {
@@ -3059,7 +3060,7 @@ async function sendMiniChatMessage(event) {
   const input = $("#miniChatInput");
   if (!thread || !user || !input) return;
   if (thread.type === "member_member" && !getRequestById(thread.requestId)?.memberChatEnabled) {
-    showToast("红娘暂未开启群聊权限");
+    showToast("红娘暂未开启男女双方私聊");
     return;
   }
   const content = input.value.trim();

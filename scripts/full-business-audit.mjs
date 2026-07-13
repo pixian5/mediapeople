@@ -224,6 +224,10 @@ await step("chat isolation and member chat gate", async () => {
     (thread) => thread.requestId === ids.requestId && thread.type === "member_matchmaker",
   );
   assert(privateThread, "missing private thread");
+  const visibleGroup = clientThreads.data.data.list.find(
+    (thread) => thread.requestId === ids.requestId && thread.type === "matchmaker_group",
+  );
+  assert(visibleGroup, "three-party group should be visible independently of member direct chat");
   await req(BASE_CLIENT, `/chat/threads/${privateThread.id}/messages`, {
     method: "POST",
     token: maleToken,
@@ -269,6 +273,30 @@ await step("chat isolation and member chat gate", async () => {
     expected: [403],
   });
   assert(rejected.status === 403, "disabled member chat should reject");
+});
+
+await step("request completion, rating and rematch", async () => {
+  const completed = await req(BASE_CLIENT, `/client/match-requests/${ids.requestId}/outcome`, {
+    method: "PATCH",
+    token: maleToken,
+    body: { outcome: "stable_progress" },
+  });
+  assert(completed.data.request.status === "已完成", "request status not completed");
+
+  const rated = await req(BASE_CLIENT, `/client/match-requests/${ids.requestId}/rating`, {
+    method: "PATCH",
+    token: maleToken,
+    body: { rating: 5, comment: "自动审计" },
+  });
+  assert(rated.data.request.customerRating === 5, "rating not saved");
+
+  const rematch = await req(BASE_CLIENT, "/client/match-requests", {
+    method: "POST",
+    token: maleToken,
+    body: { targetUserId: ids.femaleId, matchmakerId: "m1" },
+  });
+  assert(rematch.data.request.id !== ids.requestId, "completed request should allow rematch");
+  ids.rematchRequestId = rematch.data.request.id;
 });
 
 await step("client cannot write whole state", async () => {

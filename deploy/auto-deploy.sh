@@ -28,8 +28,8 @@ bark_notify() {
 # 部署结束通知（成功/失败均触发）
 DEPLOY_START_TIME=$(date +%s)
 bark_on_exit() {
-  set +e  # trap 内禁用 set -e，确保 bark_notify 一定能执行
   local exit_code=$?
+  set +e  # trap 内禁用 set -e，确保 bark_notify 一定能执行
   local elapsed=$(( $(date +%s) - DEPLOY_START_TIME ))
   local commit_hash commit_msg
   commit_hash=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -167,5 +167,19 @@ docker compose -f "$REPO_DIR/compose.yml" -f "$REPO_DIR/compose.ssl.yml" up -d \
 
 log "正在检查网关配置..."
 docker exec matchmaker-gateway nginx -t 2>&1 | tee -a "$LOG_FILE"
+
+log "正在检查线上 API 健康状态..."
+HEALTH_OK=false
+for attempt in 1 2 3 4 5; do
+  if curl -kfsS --max-time 10 "https://127.0.0.1:21314/api/health" | grep -q '"ok":true'; then
+    HEALTH_OK=true
+    break
+  fi
+  sleep 2
+done
+if [ "$HEALTH_OK" != "true" ]; then
+  log "ERROR: 部署后 API 健康检查失败"
+  exit 1
+fi
 
 log "===== 部署完成 ====="
